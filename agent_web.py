@@ -6,7 +6,7 @@ from io import StringIO
 import warnings
 
 # --- KONFIGURACJA ---
-st.set_page_config(page_title="KOLgejt", page_icon="⚙️", layout="wide")
+st.set_page_config(page_title="KOLgejt 4.1", page_icon="⚙️", layout="wide")
 warnings.simplefilter(action='ignore', category=FutureWarning)
 
 if 'watchlist' not in st.session_state:
@@ -31,99 +31,109 @@ def calc_bollinger(series, period=20, std_dev=2):
     lower = sma - (std * std_dev)
     return upper, lower
 
-# --- POBIERANIE DANYCH ---
+# --- PANCERNE POBIERANIE LISTY SPÓŁEK ---
 
 @st.cache_data(ttl=24*3600)
 def get_tickers(market_type):
-    headers = {"User-Agent": "Mozilla/5.0"}
+    headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36"}
     tickers = []
     
+    # === NASDAQ 100 ===
     if market_type == "Nasdaq":
-        url = 'https://en.wikipedia.org/wiki/Nasdaq-100'
         try:
-            tables = pd.read_html(requests.get(url, headers=headers).text)
-            for t in tables:
-                if 'Ticker' in t.columns: 
-                    tickers = t['Ticker'].tolist()
-                    break
-            if not tickers: tickers = tables[4]['Ticker'].tolist()
-        except:
-            return ["AAPL", "MSFT", "NVDA", "TSLA", "AMD"]
-    else:
-        url = 'https://en.wikipedia.org/wiki/List_of_S%26P_500_companies'
-        try:
-            tables = pd.read_html(requests.get(url, headers=headers).text)
-            tickers = tables[0]['Symbol'].tolist()
-        except:
-            return ["AAPL", "MSFT", "GOOGL", "AMZN", "META"]
+            url = 'https://en.wikipedia.org/wiki/Nasdaq-100'
+            response = requests.get(url, headers=headers)
+            tables = pd.read_html(StringIO(response.text))
             
-    return [str(t).replace('.', '-') for t in tickers]
+            # Szukanie właściwej tabeli
+            for t in tables:
+                if 'Ticker' in t.columns:
+                    return [str(x).replace('.', '-') for x in t['Ticker'].tolist()]
+            return [str(x).replace('.', '-') for x in tables[4]['Ticker'].tolist()]
+        except:
+            # Backup manualny dla Nasdaq (bo CSV jest rzadziej aktualizowany)
+            return ["AAPL", "MSFT", "NVDA", "AMZN", "GOOGL", "META", "TSLA", "AMD", "NFLX", "INTC", "CSCO", "PEP", "AVGO", "ADBE", "QCOM"]
+    
+    # === S&P 500 (TU BYŁ PROBLEM - TERAZ NAPRAWIONE) ===
+    else:
+        # 1. Próba z Wikipedii
+        try:
+            url = 'https://en.wikipedia.org/wiki/List_of_S%26P_500_companies'
+            response = requests.get(url, headers=headers)
+            tables = pd.read_html(StringIO(response.text))
+            tickers = tables[0]['Symbol'].tolist()
+            return [str(t).replace('.', '-') for t in tickers]
+        except:
+            # 2. PRÓBA ZAPASOWA (GITHUB CSV) - TO URATUJE SKANER
+            try:
+                url_csv = "https://raw.githubusercontent.com/datasets/s-and-p-500-companies/master/data/constituents.csv"
+                backup_data = pd.read_csv(url_csv)
+                tickers = backup_data['Symbol'].tolist()
+                return [str(t).replace('.', '-') for t in tickers]
+            except:
+                # 3. Ostateczność (tylko jeśli wszystko padnie)
+                return ["AAPL", "MSFT", "GOOGL", "AMZN"]
+            
+    return []
 
-# --- GŁÓWNA FUNKCJA ANALIZY ---
+# --- ANALIZA ---
 
 def analyze_stock(ticker, strategy, params):
     try:
-        # Pobieramy więcej danych (2 lata) dla długich średnich
+        # Pobieramy dane (zapas 2 lata dla SMA200)
         data = yf.download(ticker, period="2y", progress=False, timeout=5, auto_adjust=False)
+        
+        # Jeśli za mało danych, pomiń
         if len(data) < 200: return None
 
         close = data['Close']
-        
-        # Obliczamy wskaźniki w zależności od wybranej strategii
         result = None
         chart_lines = {}
 
-        # === STRATEGIA 1: RSI ODBICIE ===
+        # STRATEGIA 1: RSI
         if strategy == "RSI":
             rsi_val = calc_rsi(close, 14)
             threshold = params['rsi_threshold']
+            cur = rsi_val.iloc[-1]
             
-            # Warunek: RSI było poniżej progu, a teraz jest powyżej (lub po prostu jest niskie)
-            current_rsi = rsi_val.iloc[-1]
-            prev_rsi = rsi_val.iloc[-2]
-            
-            if current_rsi < threshold + 5: # Szersze spektrum dla obserwacji
-                is_signal = (prev_rsi <= threshold and current_rsi > threshold) or (current_rsi <= threshold)
-                
-                if is_signal:
-                    result = {
-                        "info": f"RSI: {round(current_rsi, 1)} (Próg: {threshold})",
-                        "metric_val": round(current_rsi, 1),
-                        "metric_name": "RSI"
-                    }
-                    chart_lines = {'RSI': rsi_val}
+            # Jeśli RSI jest poniżej progu + mały margines
+            if cur <= (threshold + 2):
+                result = {
+                    "info": f"RSI: {round(cur, 1)} (Silne wyprzedanie)",
+                    "metric_val": round(cur, 1),
+                    "metric_name": "RSI"
+                }
+                chart_lines = {'RSI': rsi_val}
 
-        # === STRATEGIA 2: TREND (SMA) ===
+        # STRATEGIA 2: SMA
         elif strategy == "SMA":
             period = params['sma_period']
             sma = calc_sma(close, period)
-            current_price = close.iloc[-1]
-            current_sma = sma.iloc[-1]
+            cur_price = close.iloc[-1]
+            cur_sma = sma.iloc[-1]
             
-            # Warunek: Cena powyżej średniej
-            if current_price > current_sma:
-                dist = (current_price - current_sma) / current_sma * 100
+            if cur_price > cur_sma:
+                dist = (cur_price - cur_sma) / cur_sma * 100
                 result = {
-                    "info": f"Cena {round(dist, 1)}% powyżej SMA{period}",
-                    "metric_val": round(current_sma, 2),
+                    "info": f"Trend wzrostowy (+{round(dist, 1)}% nad średnią)",
+                    "metric_val": round(cur_sma, 2),
                     "metric_name": f"SMA {period}"
                 }
                 chart_lines = {f'SMA_{period}': sma}
 
-        # === STRATEGIA 3: BOLLINGER BANDS ===
+        # STRATEGIA 3: BOLLINGER
         elif strategy == "Bollinger":
             up, low = calc_bollinger(close, 20, 2)
-            current_price = close.iloc[-1]
-            current_low = low.iloc[-1]
+            cur_price = close.iloc[-1]
+            cur_low = low.iloc[-1]
             
-            # Warunek: Cena blisko dolnej wstęgi lub ją przebiła
-            if current_price <= current_low * 1.02: # 2% marginesu błędu
+            if cur_price <= cur_low * 1.03: # 3% tolerancji
                 result = {
-                    "info": "Cena przy dolnej wstędze (Okazja?)",
-                    "metric_val": round(current_low, 2),
-                    "metric_name": "Dolna Wstęga"
+                    "info": "Cena przy dolnej wstędze",
+                    "metric_val": round(cur_low, 2),
+                    "metric_name": "Dolna Band"
                 }
-                chart_lines = {'Lower_Band': low, 'Upper_Band': up}
+                chart_lines = {'Low': low, 'Up': up}
 
         if result:
             return {
@@ -140,115 +150,28 @@ def analyze_stock(ticker, strategy, params):
 
 # --- INTERFEJS ---
 
-st.title("⚙️ KOLgejt 4.0")
+st.title("⚙️ KOLgejt 4.1")
 
-# --- SIDEBAR (KONFIGURACJA) ---
+# PANEL BOCZNY
 with st.sidebar:
-    st.header("🎛️ Panel Sterowania")
+    st.header("🎛️ Konfiguracja")
     
     st.subheader("1. Rynek")
-    market = st.radio("Wybierz indeks:", ["S&P 500", "Nasdaq"], label_visibility="collapsed")
+    market = st.radio("Indeks:", ["S&P 500", "Nasdaq"], label_visibility="collapsed")
     
     st.subheader("2. Strategia")
-    strategy_type = st.selectbox(
-        "Czego szukamy?",
-        ["RSI", "SMA", "Bollinger"],
-        format_func=lambda x: {
-            "RSI": "🏄 Odbicie (RSI)",
-            "SMA": "📈 Silny Trend (SMA)",
-            "Bollinger": "🎯 Wstęgi Bollingera"
-        }[x]
-    )
+    strategy_type = st.selectbox("Wskaźnik:", ["RSI", "SMA", "Bollinger"])
     
-    # Dynamiczne suwaki w zależności od strategii
     params = {}
     st.write("---")
-    st.write("**Parametry Strategii:**")
     
     if strategy_type == "RSI":
-        params['rsi_threshold'] = st.slider("Próg wyprzedania RSI (Taniej niż...)", 20, 50, 35)
-        st.caption("Im niższa wartość, tym silniej wyprzedana musi być spółka.")
+        params['rsi_threshold'] = st.slider("Próg RSI (Max)", 20, 60, 35)
+        st.info("Pokazuje spółki z RSI poniżej tej wartości.")
         
     elif strategy_type == "SMA":
-        params['sma_period'] = st.slider("Długość średniej (Dni)", 10, 200, 50, step=10)
-        st.caption("50 = trend średni, 200 = trend długi.")
+        params['sma_period'] = st.slider("Okres średniej", 10, 200, 50, step=10)
+        st.info("Pokazuje spółki, których cena jest powyżej tej średniej.")
         
-    elif strategy_type == "Bollinger":
-        st.info("Szukamy spółek, które dotknęły dolnej wstęgi (statystycznie tanie).")
-
-# --- GŁÓWNA CZĘŚĆ ---
-
-tab1, tab2 = st.tabs(["📡 Skaner", "⭐ Obserwowane"])
-
-with tab1:
-    st.write(f"**Aktywna strategia:** {strategy_type} na rynku {market}")
+    elif strategy_type ==
     
-    if st.button("🔍 URUCHOM SKANER", type="primary", use_container_width=True):
-        tickers = get_tickers(market)
-        
-        if not tickers:
-            st.error("Błąd pobierania listy spółek.")
-        else:
-            progress = st.progress(0)
-            status = st.empty()
-            found = []
-            
-            for i, t in enumerate(tickers):
-                if i % 10 == 0: 
-                    progress.progress((i+1)/len(tickers))
-                    status.text(f"Analizuję: {t}")
-                
-                res = analyze_stock(t, strategy_type, params)
-                if res: found.append(res)
-            
-            progress.empty()
-            status.empty()
-            
-            if found:
-                st.success(f"Znaleziono {len(found)} sygnałów!")
-                for item in found:
-                    with st.expander(f"🔥 {item['ticker']} - {item['price']}$", expanded=True):
-                        c1, c2 = st.columns([1, 2])
-                        with c1:
-                            st.write(f"**{item['details']['info']}**")
-                            st.metric(item['details']['metric_name'], item['details']['metric_val'])
-                            
-                            # Przycisk dodawania do obserwowanych
-                            if st.button(f"⭐ Dodaj {item['ticker']}", key=f"add_{item['ticker']}"):
-                                if item['ticker'] not in st.session_state.watchlist:
-                                    st.session_state.watchlist.append(item['ticker'])
-                                    st.toast("Dodano!")
-
-                            st.link_button("Yahoo Finance", f"https://finance.yahoo.com/quote/{item['ticker']}")
-                        
-                        with c2:
-                            # Rysowanie wykresu z dodatkowymi liniami (wskaźnikami)
-                            chart = item['chart_data'].tail(100)
-                            for name, line in item['extra_lines'].items():
-                                chart[name] = line
-                            
-                            colors = ["#0000FF"] # Cena (Niebieski)
-                            if len(chart.columns) > 1: colors.append("#FF0000") # Wskaźnik 1 (Czerwony)
-                            if len(chart.columns) > 2: colors.append("#00FF00") # Wskaźnik 2 (Zielony)
-                            
-                            st.line_chart(chart, color=colors)
-            else:
-                st.warning("Brak wyników. Spróbuj poluzować kryteria w panelu bocznym (z lewej).")
-
-with tab2:
-    st.subheader("Obserwowane")
-    new = st.text_input("Dodaj symbol:", placeholder="np. AMD").upper().strip()
-    if st.button("Dodaj") and new:
-        if new not in st.session_state.watchlist:
-            st.session_state.watchlist.append(new)
-            st.rerun()
-            
-    if st.session_state.watchlist:
-        if st.button("Wyczyść"):
-            st.session_state.watchlist = []
-            st.rerun()
-            
-        for w in st.session_state.watchlist:
-            st.write(f"⭐ **{w}**")
-    else:
-        st.info("Lista pusta.")
