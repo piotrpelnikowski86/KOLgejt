@@ -1,14 +1,31 @@
 import streamlit as st
 import yfinance as yf
 import pandas as pd
+import requests
+from io import StringIO
 import warnings
 
 # --- KONFIGURACJA ---
-st.set_page_config(page_title="KOLgejt 4.3", page_icon="📊", layout="wide")
+st.set_page_config(page_title="KOLgejt", page_icon="📈", layout="wide")
 warnings.simplefilter(action='ignore', category=FutureWarning)
 
-if 'watchlist' not in st.session_state:
-    st.session_state.watchlist = []
+# --- LISTY ZAPASOWE (TOP 50) ---
+# Używane do Podglądu Live oraz jako Koło Ratunkowe, gdyby pełne skanowanie padło.
+SP500_TOP50 = [
+    "AAPL", "MSFT", "NVDA", "GOOGL", "AMZN", "META", "TSLA", "BRK-B", "LLY", "AVGO",
+    "JPM", "V", "XOM", "UNH", "MA", "PG", "JNJ", "HD", "MRK", "COST",
+    "ABBV", "CVX", "CRM", "BAC", "WMT", "AMD", "ACN", "PEP", "KO", "LIN",
+    "TMO", "DIS", "MCD", "CSCO", "ABT", "INTC", "WFC", "VZ", "NFLX", "QCOM",
+    "INTU", "NKE", "IBM", "PM", "GE", "AMAT", "TXN", "NOW", "SPGI", "CAT"
+]
+
+NASDAQ_TOP50 = [
+    "AAPL", "MSFT", "NVDA", "AMZN", "GOOGL", "META", "TSLA", "AVGO", "COST", "PEP",
+    "AMD", "NFLX", "CSCO", "INTC", "TMUS", "CMCSA", "TXN", "AMAT", "QCOM", "HON",
+    "INTU", "AMGN", "BKNG", "ISRG", "SBUX", "MDLZ", "GILD", "ADP", "LRCX", "ADI",
+    "REGN", "VRTX", "MU", "PANW", "SNPS", "KLAC", "CDNS", "CHTR", "MELI", "MAR",
+    "CSX", "PYPL", "MNST", "ORLY", "ASML", "NXPI", "CTAS", "WDAY", "FTNT", "KDP"
+]
 
 # --- FUNKCJE MATEMATYCZNE ---
 
@@ -29,21 +46,50 @@ def calc_bollinger(series, period=20, std_dev=2):
     low = sma - (std * std_dev)
     return up, low
 
-# --- LISTA SPÓŁEK (TOP 50 - GWARANCJA DZIAŁANIA) ---
-TOP_STOCKS = [
-    "AAPL", "MSFT", "NVDA", "GOOGL", "AMZN", "META", "TSLA", "BRK-B", "LLY", "AVGO",
-    "JPM", "V", "XOM", "UNH", "MA", "PG", "JNJ", "HD", "MRK", "COST",
-    "ABBV", "CVX", "CRM", "BAC", "WMT", "AMD", "ACN", "PEP", "KO", "LIN",
-    "TMO", "DIS", "MCD", "CSCO", "ABT", "INTC", "WFC", "VZ", "NFLX", "QCOM",
-    "INTU", "NKE", "IBM", "PM", "GE", "AMAT", "TXN", "NOW", "SPGI", "CAT"
-]
+# --- INTELIGENTNE POBIERANIE LISTY (FULL SCAN) ---
+
+@st.cache_data(ttl=3600) # Cache na 1h
+def get_tickers_full(market_type):
+    headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36"}
+    
+    # 1. NASDAQ (Pełna lista)
+    if market_type == "Nasdaq":
+        try:
+            # Próba 1: Wikipedia
+            url = 'https://en.wikipedia.org/wiki/Nasdaq-100'
+            response = requests.get(url, headers=headers)
+            tables = pd.read_html(StringIO(response.text))
+            for t in tables:
+                if 'Ticker' in t.columns:
+                    return [str(x).replace('.', '-') for x in t['Ticker'].tolist()]
+            return [str(x).replace('.', '-') for x in tables[4]['Ticker'].tolist()]
+        except:
+            # Backup: Zwracamy Top 50 (żeby skaner działał mimo błędu sieci)
+            return NASDAQ_TOP50
+
+    # 2. S&P 500 (Pełna lista)
+    else:
+        try:
+            # Próba 1: Wikipedia
+            url = 'https://en.wikipedia.org/wiki/List_of_S%26P_500_companies'
+            response = requests.get(url, headers=headers)
+            tables = pd.read_html(StringIO(response.text))
+            return [str(t).replace('.', '-') for t in tables[0]['Symbol'].tolist()]
+        except:
+            try:
+                # Próba 2: GitHub CSV
+                url_csv = "https://raw.githubusercontent.com/datasets/s-and-p-500-companies/master/data/constituents.csv"
+                return [str(t).replace('.', '-') for t in pd.read_csv(url_csv)['Symbol'].tolist()]
+            except:
+                # Backup: Top 50
+                return SP500_TOP50
 
 # --- ANALIZA ---
 
 def analyze_stock(ticker, strategy, params):
     try:
-        # Pobieranie danych
-        data = yf.download(ticker, period="1y", progress=False, timeout=3, auto_adjust=False)
+        # Timeout 2s dla szybkości przy pełnym skanowaniu
+        data = yf.download(ticker, period="1y", progress=False, timeout=2, auto_adjust=False)
         if len(data) < 50: return None
 
         close = data['Close']
@@ -86,10 +132,10 @@ def analyze_stock(ticker, strategy, params):
             curr_price = close.iloc[-1]
             curr_low = low.iloc[-1]
             
-            if curr_price <= curr_low * 1.05:
+            if curr_price <= low.iloc[-1] * 1.05:
                 result = {
                     "info": "Przy dolnej wstędze",
-                    "val": round(curr_low, 2),
+                    "val": round(low.iloc[-1], 2),
                     "name": "Dolna Band"
                 }
                 chart_lines = {'Low': low, 'Up': up}
@@ -98,6 +144,7 @@ def analyze_stock(ticker, strategy, params):
             return {
                 "ticker": ticker,
                 "price": round(close.iloc[-1], 2),
+                "change": round(((close.iloc[-1] - close.iloc[-2])/close.iloc[-2])*100, 2),
                 "details": result,
                 "chart_data": data[['Close']].copy(),
                 "extra_lines": chart_lines
@@ -108,34 +155,108 @@ def analyze_stock(ticker, strategy, params):
 
 # --- INTERFEJS ---
 
-st.title("📊 KOLgejt 4.3")
+st.title("📈 KOLgejt")
 
+# PANEL BOCZNY (USTAWIENIA)
 with st.sidebar:
-    st.header("Ustawienia")
-    strat = st.selectbox("Strategia:", ["RSI", "SMA", "Bollinger"])
+    st.header("⚙️ Konfiguracja")
+    
+    st.subheader("1. Rynek")
+    market = st.radio("Indeks:", ["🇺🇸 S&P 500", "💻 Nasdaq 100"])
+    
+    st.divider()
+    
+    st.subheader("2. Kryteria")
+    strat = st.selectbox("Strategia:", ["RSI (Wyprzedanie)", "SMA (Trend)", "Bollinger (Dołki)"])
     
     params = {}
-    st.write("---")
-    if strat == "RSI":
-        params['rsi_threshold'] = st.slider("Próg RSI", 20, 80, 35) 
-    elif strat == "SMA":
-        params['sma_period'] = st.slider("Średnia (dni)", 10, 200, 50)
-    elif strat == "Bollinger":
-        st.info("Cena przy dolnej wstędze.")
+    if "RSI" in strat:
+        params['rsi_threshold'] = st.slider("Szukaj RSI poniżej:", 20, 75, 40)
+        st.caption("Im wyżej, tym więcej wyników.")
+    elif "SMA" in strat:
+        params['sma_period'] = st.slider("Długość średniej:", 10, 200, 50)
+    elif "Bollinger" in strat:
+        st.info("Szukamy ceny przy dolnej wstędze.")
 
-# START
-if st.button("🔍 SKANUJ RYNEK (Top 50)", type="primary", use_container_width=True):
-    st.toast(f"Skanuję rynek...")
+# GŁÓWNY WIDOK
+
+# Ustalenie listy preview (zawsze top 8)
+if "Nasdaq" in market:
+    preview_tickers = NASDAQ_TOP50[:8]
+    market_name = "Nasdaq 100"
+else:
+    preview_tickers = SP500_TOP50[:8]
+    market_name = "S&P 500"
+
+# --- SEKCJA PODGLĄDU (LIVE) ---
+st.subheader(f"🔥 Podgląd rynku: {market_name}")
+try:
+    cols = st.columns(4)
+    data_top = yf.download(preview_tickers, period="2d", progress=False, timeout=2, auto_adjust=False)['Close']
     
-    bar = st.progress(0)
+    for i, t in enumerate(preview_tickers):
+        if t in data_top.columns:
+            curr = data_top[t].iloc[-1]
+            prev = data_top[t].iloc[-2]
+            chg = ((curr - prev) / prev) * 100
+            
+            color = "normal"
+            if chg > 0: color = "off" # Streamlit metric sam koloruje na zielono/czerwono
+            
+            with cols[i % 4]:
+                st.metric(t, f"{curr:.2f}$", f"{chg:.2f}%")
+except:
+    st.caption("Ładowanie podglądu...")
+
+st.divider()
+
+# --- SEKCJA SKANERA ---
+st.subheader("📡 Pełny Skaner")
+
+if st.button(f"🔍 SKANUJ CAŁY {market_name.upper()}", type="primary", use_container_width=True):
+    
+    # 1. Pobieranie pełnej listy
+    with st.spinner(f"Pobieram pełną listę spółek dla {market_name}..."):
+        tickers = get_tickers_full("Nasdaq" if "Nasdaq" in market else "SP500")
+    
+    # Sprawdzenie czy pobrało full czy backup
+    if len(tickers) > 60:
+        st.toast(f"Pełny skan: {len(tickers)} spółek.")
+    else:
+        st.warning(f"⚠️ Tryb awaryjny: Skanuję Top {len(tickers)} (Wikipedia zablokowana).")
+
+    progress = st.progress(0)
+    status = st.empty()
     found = []
     
-    for i, t in enumerate(TOP_STOCKS):
-        bar.progress((i+1)/len(TOP_STOCKS))
-        res = analyze_stock(t, strat, params)
+    # Pętla skanowania
+    for i, t in enumerate(tickers):
+        # Aktualizacja UI co 3% postępu (żeby nie zamulać przeglądarki przy 500 elementach)
+        if i % 15 == 0 or i == len(tickers)-1:
+            progress.progress((i+1)/len(tickers))
+            status.text(f"Analizuję {i+1}/{len(tickers)}: {t}")
+        
+        res = analyze_stock(t, strat.split()[0], params)
         if res: found.append(res)
     
-    bar.empty()
+    progress.empty()
+    status.empty()
     
+    # WYNIKI
     if found:
-        st.success(f"Znaleziono: {len(found)} spółek")
+        st.success(f"Znaleziono {len(found)} spółek spełniających kryteria!")
+        for item in found:
+            with st.expander(f"{item['ticker']} ({item['change']}%) - {item['price']}$", expanded=True):
+                c1, c2 = st.columns([1, 2])
+                with c1:
+                    st.write(f"**Sygnał:** {item['details']['info']}")
+                    st.metric(item['details']['name'], item['details']['val'])
+                    st.link_button("Yahoo Finance", f"https://finance.yahoo.com/quote/{item['ticker']}")
+                with c2:
+                    chart = item['chart_data'].tail(60)
+                    for k, v in item['extra_lines'].items():
+                        chart[k] = v
+                    st.line_chart(chart)
+    else:
+        st.warning("Brak wyników.")
+        st.info("Rynek nie daje okazji przy tych ustawieniach. Spróbuj poluzować kryteria w panelu bocznym.")
