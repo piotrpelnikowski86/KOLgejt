@@ -6,7 +6,7 @@ from io import StringIO
 import warnings
 
 # --- KONFIGURACJA ---
-st.set_page_config(page_title="KOLgejt", page_icon="logo.jpeg")
+st.set_page_config(page_title="KOLgejt", page_icon="IMG_4485.jpeg")
 warnings.simplefilter(action='ignore', category=FutureWarning)
 
 # --- FUNKCJE MATEMATYCZNE (Ręczne obliczenia zamiast biblioteki) ---
@@ -121,4 +121,5 @@ if st.button("🔍 URUCHOM SKANOWANIE"):
             st.balloons()
         else:
             st.warning("Brak sygnałów spełniających kryteria.")
+
 
