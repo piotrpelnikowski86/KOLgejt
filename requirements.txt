@@ -5,3 +5,5 @@ pandas_ta
 requests
 numpy<2.0.0
 lxml
+html5lib
+beautifulsoup4
