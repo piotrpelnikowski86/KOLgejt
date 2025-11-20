@@ -2,8 +2,7 @@ streamlit
 yfinance
 pandas
 requests
-numpy<2.0.0
 lxml
 html5lib
 beautifulsoup4
-git+https://github.com/twopirllc/pandas-ta.git@development
+https://github.com/twopirllc/pandas-ta/archive/development.zip
