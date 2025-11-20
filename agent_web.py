@@ -42,6 +42,7 @@ TOP_STOCKS = [
 
 def analyze_stock(ticker, strategy, params):
     try:
+        # Pobieranie danych
         data = yf.download(ticker, period="1y", progress=False, timeout=3, auto_adjust=False)
         if len(data) < 50: return None
 
@@ -107,7 +108,7 @@ def analyze_stock(ticker, strategy, params):
 
 # --- INTERFEJS ---
 
-st.title("📊 KOLgejt")
+st.title("📊 KOLgejt 4.3")
 
 with st.sidebar:
     st.header("Ustawienia")
@@ -138,10 +139,3 @@ if st.button("🔍 SKANUJ RYNEK (Top 50)", type="primary", use_container_width=T
     
     if found:
         st.success(f"Znaleziono: {len(found)} spółek")
-        for item in found:
-            with st.expander(f"🔥 {item['ticker']} - {item['price']}$", expanded=True):
-                c1, c2 = st.columns([1, 2])
-                with c1:
-                    st.metric(item['details']['name'], item['details']['val'])
-                    st.write(item['details']['info'])
-                    st.link_button("Yahoo Finance", f"
