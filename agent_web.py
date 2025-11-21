@@ -8,7 +8,7 @@ from datetime import datetime
 st.set_page_config(page_title="KOLgejt", page_icon="📈", layout="wide")
 warnings.simplefilter(action='ignore', category=FutureWarning)
 
-# --- CSS (STYL WEBULL DARK) ---
+# --- CSS (STYL WEBULL DARK + LINKI) ---
 st.markdown("""
 <style>
 .scroll-container {
@@ -33,10 +33,19 @@ st.markdown("""
     text-align: center;
     padding: 12px;
     background-color: #0E1117;
+    border-bottom: 1px solid #41424C;
+}
+/* Stylizacja linku w nagłówku */
+.card-header a {
     color: white;
     font-size: 18px;
     font-weight: bold;
-    border-bottom: 1px solid #41424C;
+    text-decoration: none;
+    transition: color 0.3s;
+}
+.card-header a:hover {
+    color: #00AAFF; /* Niebieski po najechaniu */
+    text-decoration: underline;
 }
 .webull-table {
     width: 100%;
@@ -66,6 +75,7 @@ st.markdown("""
     align-items: center;
     padding: 20px;
     background-color: #262730;
+    min-height: 80px;
 }
 .big-logo {
     height: 60px;
@@ -93,12 +103,16 @@ st.markdown("""
 # --- LISTY ---
 SP500_TOP = ["AAPL", "MSFT", "NVDA", "GOOGL", "AMZN", "META", "TSLA", "AMD", "NFLX", "JPM", "DIS", "V", "MA"]
 NASDAQ_TOP = ["AAPL", "MSFT", "NVDA", "AMZN", "GOOGL", "META", "TSLA", "AVGO", "COST", "PEP", "AMD", "INTC"]
-WIG20_FULL = ["PKN.WA", "PKO.WA", "PZU.WA", "PEO.WA", "DNP.WA", "KGH.WA", "LPP.WA", "ALE.WA", "CDR.WA"]
+WIG20_FULL = ["PKN.WA", "PKO.WA", "PZU.WA", "PEO.WA", "DNP.WA", "KGH.WA", "LPP.WA", "ALE.WA", "CDR.WA", "SPL.WA", "CPS.WA", "PGE.WA"]
 
 DOMAINS = {
     "AAPL": "apple.com", "MSFT": "microsoft.com", "NVDA": "nvidia.com", "GOOGL": "google.com",
     "AMZN": "amazon.com", "META": "meta.com", "TSLA": "tesla.com", "AMD": "amd.com",
-    "NFLX": "netflix.com", "PKN.WA": "orlen.pl", "PKO.WA": "pkobp.pl", "CDR.WA": "cdprojekt.com"
+    "NFLX": "netflix.com", "JPM": "jpmorganchase.com", "DIS": "disney.com",
+    "PKN.WA": "orlen.pl", "PKO.WA": "pkobp.pl", "PZU.WA": "pzu.pl", 
+    "PEO.WA": "pekao.com.pl", "DNP.WA": "grupadino.pl", "KGH.WA": "kghm.com",
+    "LPP.WA": "lpp.com", "ALE.WA": "allegro.eu", "CDR.WA": "cdprojekt.com",
+    "SPL.WA": "santander.pl", "CPS.WA": "cyfrowypolsat.pl", "PGE.WA": "gkpge.pl"
 }
 
 def format_large_num(num):
@@ -108,7 +122,7 @@ def format_large_num(num):
     return f"{num:.2f}"
 
 @st.cache_data(ttl=3600*12)
-def get_earnings_data_v5(ticker): # v5 dla odświeżenia
+def get_earnings_data_v7(ticker): # v7 cache refresh
     try:
         stock = yf.Ticker(ticker)
         info = stock.info
@@ -136,10 +150,18 @@ def get_earnings_data_v5(ticker): # v5 dla odświeżenia
         rev_growth = info.get('revenueGrowth', 0) * 100
         earn_growth = info.get('earningsGrowth', 0) * 100
         
-        logo = f"https://logo.clearbit.com/{DOMAINS.get(ticker, 'google.com')}"
+        domain = DOMAINS.get(ticker)
+        if domain:
+            logo = f"https://logo.clearbit.com/{domain}"
+        else:
+            logo = None 
         
+        # Link do Yahoo Finance
+        link_url = f"https://finance.yahoo.com/quote/{ticker}"
+
         return {
             "ticker": ticker,
+            "link": link_url,
             "logo": logo,
             "eps_est": round(eps_est, 2),
             "eps_act": round(eps_act, 2),
@@ -225,7 +247,7 @@ def analyze_stock(ticker, strategy, params):
 
 # --- UI ---
 with st.sidebar:
-    st.header("KOLgejt 7.5")
+    st.header("KOLgejt 7.7")
     market_choice = st.radio("Giełda:", ["🇺🇸 S&P 500", "💻 Nasdaq 100", "🇵🇱 WIG20 (GPW)"])
     st.divider()
     strat = st.selectbox("Skaner:", ["RSI (Wyprzedanie)", "SMA (Trend)"])
@@ -267,19 +289,47 @@ if losers:
 
 st.write("---")
 
-# 2. EARNINGS (HTML FLATTENED)
+# 2. EARNINGS (KARTA Z LINKIEM)
 st.subheader("💎 Spółka Fundamentalna (Potencjał)")
 earnings_html = '<div class="scroll-container">'
 with st.spinner("Szukam okazji fundamentalnych..."):
     for t in tickers[:8]:
-        e = get_earnings_data_v5(t) # v5 cache buster
+        e = get_earnings_data_v7(t)
         if e:
-            # Flattened HTML to avoid indentation errors in Python string
-            card = f"""<div class="webull-card"><div class="card-header">{e['ticker'].replace('.WA','')}</div><table class="webull-table"><thead><tr><th>Wskaźnik</th><th>Prognoza</th><th>Wynik</th><th>Beat/Miss</th></tr></thead><tbody><tr><td>EPS ($)</td><td>{e['eps_est']}</td><td>{e['eps_act']}</td><td class="{e['eps_class']}">{e['eps_txt']}</td></tr><tr class="row-alt"><td>Przychód</td><td>{e['rev_est']}</td><td>{e['rev_act']}</td><td class="{e['rev_class']}">{e['rev_txt']}</td></tr></tbody></table><div class="logo-container"><img src="{e['logo']}" class="big-logo" onerror="this.style.display='none'"></div><div class="bottom-stats"><div class="stat-row"><span>Przychody r/r:</span><span class="{e['growth_rev_class']}">{e['rev_growth']}%</span></div><div class="stat-row"><span>Zysk (EPS) r/r:</span><span class="{e['growth_eps_class']}">{e['earn_growth']}%</span></div></div></div>"""
+            if e['logo']:
+                logo_html = f'<div class="logo-container"><img src="{e["logo"]}" class="big-logo" onerror="this.style.display=\'none\'"></div>'
+            else:
+                logo_html = '<div class="logo-container" style="height:60px;"></div>'
+
+            # Tutaj dodany link w nagłówku (tag <a>)
+            card = f"""<div class="webull-card"><div class="card-header"><a href="{e['link']}" target="_blank" title="Zobacz na Yahoo Finance">{e['ticker'].replace('.WA','')} 🔗</a></div><table class="webull-table"><thead><tr><th>Wskaźnik</th><th>Prognoza</th><th>Wynik</th><th>Beat/Miss</th></tr></thead><tbody><tr><td>EPS ($)</td><td>{e['eps_est']}</td><td>{e['eps_act']}</td><td class="{e['eps_class']}">{e['eps_txt']}</td></tr><tr class="row-alt"><td>Przychód</td><td>{e['rev_est']}</td><td>{e['rev_act']}</td><td class="{e['rev_class']}">{e['rev_txt']}</td></tr></tbody></table>{logo_html}<div class="bottom-stats"><div class="stat-row"><span>Przychody r/r:</span><span class="{e['growth_rev_class']}">{e['rev_growth']}%</span></div><div class="stat-row"><span>Zysk (EPS) r/r:</span><span class="{e['growth_eps_class']}">{e['earn_growth']}%</span></div></div></div>"""
             earnings_html += card
 earnings_html += "</div>"
 st.markdown(earnings_html, unsafe_allow_html=True)
 
 st.write("---")
 
-# 3. SK
+# 3. SKANER
+st.subheader(f"📡 Skaner ({strat.split()[0]})")
+if st.button(f"🔍 SKANUJ {market}", type="primary", use_container_width=True):
+    prog = st.progress(0); stat = st.empty(); found = []
+    for i, t in enumerate(tickers):
+        if i%5==0: prog.progress((i+1)/len(tickers)); stat.text(f"Analiza: {t}")
+        res = analyze_stock(t, strat.split()[0], params)
+        if res: found.append(res)
+    prog.empty(); stat.empty()
+    if found:
+        st.success(f"Znaleziono: {len(found)}")
+        for item in found:
+            with st.expander(f"{item['ticker']} ({item['change']}%) - {item['price']}", expanded=True):
+                c1, c2 = st.columns([1,2])
+                with c1:
+                    st.write(f"**Sygnał:** {item['details']['info']}")
+                    st.metric(item['details']['name'], item['details']['val'])
+                    if ".WA" in item['ticker']: link = f"https://www.biznesradar.pl/notowania/{item['ticker'].replace('.WA', '')}"; st.link_button("👉 BiznesRadar", link)
+                    else: link = f"https://finance.yahoo.com/quote/{item['ticker']}"; st.link_button("👉 Yahoo Finance", link)
+                with c2:
+                    ch = item['chart_data'].tail(60)
+                    for k,v in item['extra_lines'].items(): ch[k]=v
+                    st.line_chart(ch)
+    else: st.warning("Brak wyników.")
