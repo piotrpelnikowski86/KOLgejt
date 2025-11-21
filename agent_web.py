@@ -8,10 +8,9 @@ from datetime import datetime
 st.set_page_config(page_title="KOLgejt", page_icon="📈", layout="wide")
 warnings.simplefilter(action='ignore', category=FutureWarning)
 
-# --- CSS (CIEMNY STYL - DOPASOWANY) ---
+# --- CSS (STYL WEBULL DARK) ---
 st.markdown("""
 <style>
-/* Kontener paska przewijania */
 .scroll-container {
     display: flex;
     overflow-x: auto;
@@ -20,11 +19,9 @@ st.markdown("""
     scrollbar-width: thin;
     scrollbar-color: #555 #1E1E1E;
 }
-
-/* Karta Ciemna */
 .webull-card {
-    flex: 0 0 auto; /* Nie ściskać kart */
-    background-color: #262730; /* Tło Streamlit Dark */
+    flex: 0 0 auto;
+    background-color: #262730;
     border-radius: 12px;
     width: 350px;
     font-family: sans-serif;
@@ -32,8 +29,6 @@ st.markdown("""
     overflow: hidden;
     box-shadow: 0 4px 10px rgba(0,0,0,0.5);
 }
-
-/* Nagłówek karty */
 .card-header {
     text-align: center;
     padding: 12px;
@@ -42,10 +37,7 @@ st.markdown("""
     font-size: 18px;
     font-weight: bold;
     border-bottom: 1px solid #41424C;
-    letter-spacing: 1px;
 }
-
-/* Tabela */
 .webull-table {
     width: 100%;
     border-collapse: collapse;
@@ -53,7 +45,6 @@ st.markdown("""
     text-align: center;
     color: #DDD;
 }
-
 .webull-table th {
     background-color: #31333F;
     color: #AAA;
@@ -62,22 +53,13 @@ st.markdown("""
     font-size: 11px;
     text-transform: uppercase;
 }
-
 .webull-table td {
     padding: 10px 5px;
     border-bottom: 1px solid #31333F;
 }
-
-/* Wiersz parzysty (lekko jaśniejszy) */
-.row-alt {
-    background-color: #2C2D36;
-}
-
-/* Kolory */
+.row-alt { background-color: #2C2D36; }
 .text-green { color: #00FF00; font-weight: bold; }
 .text-red { color: #FF4B4B; font-weight: bold; }
-
-/* Logo na środku */
 .logo-container {
     display: flex;
     justify-content: center;
@@ -90,11 +72,9 @@ st.markdown("""
     width: 60px;
     object-fit: contain;
     border-radius: 10px;
-    background-color: white; /* Tło dla logo, żeby było widać na ciemnym */
+    background-color: white;
     padding: 5px;
 }
-
-/* Statystyki dolne */
 .bottom-stats {
     padding: 15px;
     font-size: 12px;
@@ -110,7 +90,7 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-# --- LISTY SPÓŁEK ---
+# --- LISTY ---
 SP500_TOP = ["AAPL", "MSFT", "NVDA", "GOOGL", "AMZN", "META", "TSLA", "AMD", "NFLX", "JPM", "DIS", "V", "MA"]
 NASDAQ_TOP = ["AAPL", "MSFT", "NVDA", "AMZN", "GOOGL", "META", "TSLA", "AVGO", "COST", "PEP", "AMD", "INTC"]
 WIG20_FULL = ["PKN.WA", "PKO.WA", "PZU.WA", "PEO.WA", "DNP.WA", "KGH.WA", "LPP.WA", "ALE.WA", "CDR.WA"]
@@ -121,39 +101,33 @@ DOMAINS = {
     "NFLX": "netflix.com", "PKN.WA": "orlen.pl", "PKO.WA": "pkobp.pl", "CDR.WA": "cdprojekt.com"
 }
 
-# --- FUNKCJE ---
-
 def format_large_num(num):
     if num is None: return "-"
     if num > 1e9: return f"{num/1e9:.2f}B"
     if num > 1e6: return f"{num/1e6:.2f}M"
     return f"{num:.2f}"
 
+# Zmiana nazwy funkcji na v2 wymusza odświeżenie cache i naprawia błąd KeyError
 @st.cache_data(ttl=3600*12)
-def get_earnings_card_data(ticker):
+def get_earnings_data_v2(ticker):
     try:
         stock = yf.Ticker(ticker)
         info = stock.info
         
         eps_act = info.get('trailingEps', 0)
-        eps_est = info.get('forwardEps', eps_act * 0.95) # Symulacja estymacji
+        eps_est = info.get('forwardEps', eps_act * 0.95)
         
         rev_act = info.get('totalRevenue', 0)
         rev_est = rev_act * 0.98
         
-        # Obliczenia Beat/Miss
+        # Obliczenia
         if eps_est and eps_est != 0:
             eps_diff_pct = ((eps_act - eps_est) / abs(eps_est)) * 100
-        else:
-            eps_diff_pct = 0
+        else: eps_diff_pct = 0
             
         if rev_est and rev_est != 0:
             rev_diff_pct = ((rev_act - rev_est) / rev_est) * 100
-        else:
-            rev_diff_pct = 0
-        
-        # Tylko pozytywne do "Spółki Fundamentalnej" (lub neutralne)
-        # Jeśli chcesz pokazywać wszystkie, usuń ten warunek, ale prosiłeś o wskazanie na wzrosty
+        else: rev_diff_pct = 0
         
         eps_class = "text-green" if eps_diff_pct >= 0 else "text-red"
         eps_label = "Beat" if eps_diff_pct >= 0 else "Miss"
@@ -161,7 +135,6 @@ def get_earnings_card_data(ticker):
         rev_class = "text-green" if rev_diff_pct >= 0 else "text-red"
         rev_label = "Beat" if rev_diff_pct >= 0 else "Miss"
         
-        # Growth metrics
         rev_growth = info.get('revenueGrowth', 0) * 100
         earn_growth = info.get('earningsGrowth', 0) * 100
         
@@ -178,8 +151,9 @@ def get_earnings_card_data(ticker):
             "rev_act": format_large_num(rev_act),
             "rev_txt": f"{rev_label} {abs(rev_diff_pct):.0f}%",
             "rev_class": rev_class,
-            "growth_rev": round(rev_growth, 1),
-            "growth_eps": round(earn_growth, 1),
+            "rev_growth": round(rev_growth, 1),
+            "earn_growth": round(earn_growth, 1),
+            # Te klucze są kluczowe dla naprawy błędu:
             "growth_rev_class": "text-green" if rev_growth > 0 else "text-red",
             "growth_eps_class": "text-green" if earn_growth > 0 else "text-red"
         }
@@ -189,7 +163,6 @@ def get_earnings_card_data(ticker):
 def get_market_overview(tickers):
     try:
         data = yf.download(tickers, period="1mo", progress=False, timeout=5, group_by='ticker', auto_adjust=False)
-        
         leaders = []
         for t in tickers[:5]:
             try:
@@ -198,7 +171,7 @@ def get_market_overview(tickers):
                 chg = ((curr - prev) / prev) * 100
                 leaders.append({"ticker": t, "price": curr, "change": chg})
             except: pass
-
+        
         changes = []
         for t in tickers:
             try:
@@ -213,12 +186,10 @@ def get_market_overview(tickers):
         losers = changes[:5]
         changes.sort(key=lambda x: x['m_change'], reverse=True)
         gainers = changes[:5]
-        
         return leaders, gainers, losers
     except:
         return [], [], []
 
-# --- FUNKCJE TECHNICZNE ---
 def calc_rsi(series, period=14):
     delta = series.diff()
     gain = (delta.where(delta > 0, 0)).ewm(alpha=1/period, adjust=False).mean()
@@ -255,17 +226,16 @@ def analyze_stock(ticker, strategy, params):
     except: return None
     return None
 
-# --- INTERFEJS ---
-
+# --- UI ---
 with st.sidebar:
-    st.header("KOLgejt 7.1")
+    st.header("KOLgejt 7.2")
     market_choice = st.radio("Giełda:", ["🇺🇸 S&P 500", "💻 Nasdaq 100", "🇵🇱 WIG20 (GPW)"])
     st.divider()
     strat = st.selectbox("Skaner:", ["RSI (Wyprzedanie)", "SMA (Trend)"])
     params = {}
     if "RSI" in strat: params['rsi_threshold'] = st.slider("RSI <", 20, 80, 40)
     elif "SMA" in strat: params['sma_period'] = st.slider("SMA Period", 10, 200, 50)
-    st.caption(f"Aktualizacja: {datetime.now().strftime('%H:%M')}")
+    st.caption(f"Data: {datetime.now().strftime('%H:%M')}")
 
 c1, c2 = st.columns([3,1])
 with c1: st.title("📈 KOLgejt")
@@ -276,7 +246,7 @@ if "WIG20" in market_choice: tickers=WIG20_FULL; market="WIG20"
 elif "Nasdaq" in market_choice: tickers=NASDAQ_TOP; market="Nasdaq 100"
 else: tickers=SP500_TOP; market="S&P 500"
 
-# --- 1. PULPIT ---
+# 1. PULPIT
 st.subheader(f"🔥 Pulpit: {market}")
 with st.spinner("Analiza rynku..."):
     leaders, gainers, losers = get_market_overview(tickers)
@@ -286,15 +256,12 @@ for i, l in enumerate(leaders):
     with cols[i]: st.metric(l['ticker'].replace('.WA',''), f"{l['price']:.2f}", f"{l['change']:.2f}%")
 
 st.write("---")
-
 st.markdown("### 🟩 Top 5 Wzrostów (Miesiąc)")
 if gainers:
     gc = st.columns(5)
     for i, g in enumerate(gainers):
         with gc[i]: st.metric(g['ticker'].replace('.WA',''), f"{g['price']:.2f}", f"+{g['m_change']:.2f}%", delta_color="normal")
-
 st.write("") 
-
 st.markdown("### 🔻 Top 5 Spadków (Miesiąc)")
 if losers:
     lc = st.columns(5)
@@ -303,68 +270,49 @@ if losers:
 
 st.write("---")
 
-# --- 2. SPÓŁKA FUNDAMENTALNA (SLIDER) ---
+# 2. EARNINGS (NAPRAWIONE)
 st.subheader("💎 Spółka Fundamentalna (Potencjał)")
-
 earnings_html = '<div class="scroll-container">'
-# Pobieramy dane dla pierwszych 8 spółek z listy
-with st.spinner("Szukam perełek fundamentalnych..."):
+with st.spinner("Szukam okazji fundamentalnych..."):
     for t in tickers[:8]:
-        e = get_earnings_card_data(t)
+        e = get_earnings_data_v2(t) # Użycie nowej funkcji v2
         if e:
-            # Renderowanie karty tylko jeśli dane są pobrane
             card = f"""
             <div class="webull-card">
                 <div class="card-header">{e['ticker'].replace('.WA','')}</div>
                 <table class="webull-table">
                     <thead>
-                        <tr>
-                            <th>Wskaźnik</th>
-                            <th>Prognoza</th>
-                            <th>Wynik</th>
-                            <th>Beat/Miss</th>
-                        </tr>
+                        <tr><th>Wskaźnik</th><th>Prognoza</th><th>Wynik</th><th>Beat/Miss</th></tr>
                     </thead>
                     <tbody>
                         <tr>
-                            <td>EPS ($)</td>
-                            <td>{e['eps_est']}</td>
-                            <td>{e['eps_act']}</td>
+                            <td>EPS ($)</td><td>{e['eps_est']}</td><td>{e['eps_act']}</td>
                             <td class="{e['eps_class']}">{e['eps_txt']}</td>
                         </tr>
                         <tr class="row-alt">
-                            <td>Przychód</td>
-                            <td>{e['rev_est']}</td>
-                            <td>{e['rev_act']}</td>
+                            <td>Przychód</td><td>{e['rev_est']}</td><td>{e['rev_act']}</td>
                             <td class="{e['rev_class']}">{e['rev_txt']}</td>
                         </tr>
                     </tbody>
                 </table>
-                
-                <div class="logo-container">
-                    <img src="{e['logo']}" class="big-logo" onerror="this.style.display='none'">
-                </div>
-                
+                <div class="logo-container"><img src="{e['logo']}" class="big-logo" onerror="this.style.display='none'"></div>
                 <div class="bottom-stats">
                     <div class="stat-row">
-                        <span>Przychody r/r:</span>
-                        <span class="{e['growth_rev_class']}">{e['rev_growth']}%</span>
+                        <span>Przychody r/r:</span><span class="{e['growth_rev_class']}">{e['rev_growth']}%</span>
                     </div>
                     <div class="stat-row">
-                        <span>Zysk (EPS) r/r:</span>
-                        <span class="{e['growth_eps_class']}">{e['growth_eps']}%</span>
+                        <span>Zysk (EPS) r/r:</span><span class="{e['growth_eps_class']}">{e['earn_growth']}%</span>
                     </div>
                 </div>
             </div>
             """
             earnings_html += card
 earnings_html += "</div>"
-
 st.markdown(earnings_html, unsafe_allow_html=True)
 
 st.write("---")
 
-# --- 3. SKANER ---
+# 3. SKANER
 st.subheader(f"📡 Skaner ({strat.split()[0]})")
 if st.button(f"🔍 SKANUJ {market}", type="primary", use_container_width=True):
     prog = st.progress(0); stat = st.empty(); found = []
@@ -373,9 +321,8 @@ if st.button(f"🔍 SKANUJ {market}", type="primary", use_container_width=True):
         res = analyze_stock(t, strat.split()[0], params)
         if res: found.append(res)
     prog.empty(); stat.empty()
-    
     if found:
-        st.success(f"Znaleziono {len(found)} sygnałów!")
+        st.success(f"Znaleziono: {len(found)}")
         for item in found:
             with st.expander(f"{item['ticker']} ({item['change']}%) - {item['price']}", expanded=True):
                 c1, c2 = st.columns([1,2])
