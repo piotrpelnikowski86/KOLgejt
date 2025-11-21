@@ -15,7 +15,7 @@ warnings.simplefilter(action='ignore', category=FutureWarning)
 st.markdown("""
 <style>
 .scroll-container {display: flex; overflow-x: auto; gap: 15px; padding: 10px 5px; width: 100%; scrollbar-width: thin; scrollbar-color: #555 #1E1E1E;}
-.webull-card {flex: 0 0 auto; background-color: #262730; border-radius: 12px; width: 320px; border: 1px solid #41424C; overflow: hidden; position: relative;}
+.webull-card {flex: 0 0 auto; background-color: #262730; border-radius: 12px; width: 100%; border: 1px solid #41424C; overflow: hidden; position: relative;}
 .mini-card {flex: 0 0 auto; background-color: #1E1E1E; border-radius: 8px; width: 160px; padding: 10px; text-align: center; border: 1px solid #333; box-shadow: 0 2px 5px rgba(0,0,0,0.3); transition: transform 0.2s;}
 .mini-card:hover {transform: scale(1.03); border-color: #555;}
 .mini-card-up {border-top: 3px solid #00FF00;}
@@ -207,33 +207,42 @@ def get_link(ticker):
     if ".WA" in ticker: return f"https://www.biznesradar.pl/notowania/{ticker.replace('.WA', '')}"
     return f"https://finance.yahoo.com/quote/{ticker}"
 
-# --- FUNKCJA RENDERUJĄCA KROKODYLA Z BACKUPEM ---
+# --- RENDEROWANIE KROKODYLA (PO LEWEJ, WIĘKSZY, BEZ PODPISU) ---
 def render_strong_buy_section(best_pick):
     if not best_pick:
         st.info("Brak 'Strong Buy' w tej grupie.")
         return
 
-    # Sprawdzamy lokalny plik, jeśli brak -> używamy URL z internetu
-    if os.path.exists("krokodyl.png"):
-        croc_src = "krokodyl.png"
+    # Szukanie pliku w różnych wariantach nazwy
+    if os.path.exists("krokodyl_poleca.png.png"):
+        croc_src = "krokodyl_poleca.png.png"
         is_local = True
-    elif os.path.exists("krokodyl_poleca.png"): # Sprawdzenie alternatywnej nazwy
+    elif os.path.exists("krokodyl_poleca.png"):
         croc_src = "krokodyl_poleca.png"
         is_local = True
-    elif os.path.exists("polecam2.jpg"): # Nazwa z czatu
-        croc_src = "polecam2.jpg"
+    elif os.path.exists("krokodyl.png"):
+        croc_src = "krokodyl.png"
         is_local = True
     else:
-        # Backup URL (Fajna ikona z sieci)
+        # Zapasowy link online
         croc_src = "https://cdn-icons-png.flaticon.com/512/2328/2328979.png"
         is_local = False
 
     e = best_pick
     logo_div = f'<div class="logo-container"><img src="{e["logo"]}" class="big-logo"></div>' if e['logo'] else '<div class="logo-container" style="height:60px;"></div>'
     
-    c1, c2 = st.columns([2, 1])
+    # ZMIANA UKŁADU: Krokodyl (lewo, większy), Karta (prawo)
+    c1, c2 = st.columns([2, 3]) # Lewa kolumna szersza dla dużego krokodyla
     
     with c1:
+        # Obrazek po lewej, bez podpisu, dopasowany do szerokości kolumny
+        if is_local:
+            st.image(croc_src, use_container_width=True)
+        else:
+            st.image(croc_src, width=150, caption="Brak Twojego pliku (wgraj na GitHub!)")
+
+    with c2:
+        # Karta po prawej
         st.markdown(f"""
         <div class="webull-card strong-buy-card" style="width:100%;">
             <div class="badge">STRONG BUY</div>
@@ -252,16 +261,10 @@ def render_strong_buy_section(best_pick):
             <div class="bottom-stats" style="text-align:center;">Rekomendacja: <strong>STRONG BUY</strong><br>EPS Est: {e["eps_est"]}</div>
         </div>
         """, unsafe_allow_html=True)
-        
-    with c2:
-        if is_local:
-            st.image(croc_src, width=180, caption="Polecam tę spółkę!")
-        else:
-            st.image(croc_src, width=150, caption="Brak Twojego pliku (wgraj na GitHub!)")
 
 # --- UI ---
 with st.sidebar:
-    st.header("KOLgejt 17.0")
+    st.header("KOLgejt 18.0")
     market_choice = st.radio("Giełda:", ["🇺🇸 S&P 500", "💻 Nasdaq 100", "🇵🇱 GPW (WIG20 + mWIG40)"])
     st.divider()
     
