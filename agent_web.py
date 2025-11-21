@@ -82,7 +82,7 @@ def get_market_overview(tickers):
             except: pass
         
         # Sortowanie
-        # Największe spadki (rosnąco)
+        # Największe spadki (rosnąco) - czyli najbardziej na minusie
         all_changes.sort(key=lambda x: x['month_change'])
         losers = all_changes[:5] # Pierwsze 5 to największe minusy
         
@@ -198,7 +198,7 @@ with st.spinner("Pobieram najnowsze dane..."):
 cols = st.columns(5)
 for i, item in enumerate(leaders):
     with cols[i]:
-        # Streamlit auto-colors: Positive = Green, Negative = Red
+        # Kolorowanie delty: Green dla wzrostów, Red dla spadków (domyślne w Streamlit)
         st.metric(item['ticker'].replace('.WA', ''), f"{item['price']:.2f}", f"{item['change']:.2f}%")
 
 st.write("")
@@ -214,7 +214,8 @@ with col_gain:
             st.metric(
                 g['ticker'].replace('.WA', ''), 
                 f"{g['price']:.2f}", 
-                f"+{g['month_change']:.2f}%", 
+                f"+{g['month_change']:.2f}%",
+                delta_color="normal" # Zielony dla plusa
             )
     else:
         st.write("Brak danych.")
@@ -223,12 +224,11 @@ with col_loss:
     st.markdown("### 🔻 Top 5 Spadków (Miesiąc)")
     if losers:
         for l in losers:
-            # delta_color='inverse' sprawia, że minus jest czerwony (domyślnie w streamlit minus też jest czerwony, ale to wymusza styl 'zły')
             st.metric(
                 l['ticker'].replace('.WA', ''), 
                 f"{l['price']:.2f}", 
                 f"{l['month_change']:.2f}%",
-                delta_color="normal" 
+                delta_color="normal" # Czerwony dla minusa (domyślne zachowanie przy wartości ujemnej)
             )
     else:
         st.write("Brak danych.")
@@ -238,4 +238,44 @@ st.divider()
 # --- SEKCJA 2: SKANER ---
 st.subheader(f"📡 Skaner Techniczny ({strat.split()[0]})")
 
-if st.button(f"🔍 SKANUJ {curr
+# To była linijka z błędem - teraz jest kompletna:
+if st.button(f"🔍 SKANUJ {curr_market}", type="primary", use_container_width=True):
+    
+    progress = st.progress(0)
+    status = st.empty()
+    found = []
+    
+    for i, t in enumerate(tickers):
+        if i % 5 == 0: 
+            progress.progress((i+1)/len(tickers))
+            status.text(f"Analiza: {t}")
+        
+        res = analyze_stock(t, strat.split()[0], params)
+        if res: found.append(res)
+    
+    progress.empty()
+    status.empty()
+    
+    if found:
+        st.success(f"Znaleziono {len(found)} sygnałów!")
+        for item in found:
+            with st.expander(f"{item['ticker']} ({item['change']}%) - {item['price']}", expanded=True):
+                c1, c2 = st.columns([1, 2])
+                with c1:
+                    st.write(f"**Sygnał:** {item['details']['info']}")
+                    st.metric(item['details']['name'], item['details']['val'])
+                    
+                    if ".WA" in item['ticker']:
+                        link = f"https://www.biznesradar.pl/notowania/{item['ticker'].replace('.WA', '')}"
+                        st.link_button("👉 BiznesRadar", link)
+                    else:
+                        link = f"https://finance.yahoo.com/quote/{item['ticker']}"
+                        st.link_button("👉 Yahoo Finance", link)
+
+                with c2:
+                    chart = item['chart_data'].tail(60)
+                    for k, v in item['extra_lines'].items():
+                        chart[k] = v
+                    st.line_chart(chart)
+    else:
+        st.warning(f"Brak sygnałów na rynku {curr_market}. Spróbuj zmienić strategię.")
