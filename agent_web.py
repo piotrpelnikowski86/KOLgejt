@@ -12,7 +12,7 @@ from datetime import datetime
 st.set_page_config(page_title="KOLgejt", page_icon="🐊", layout="wide")
 warnings.simplefilter(action='ignore', category=FutureWarning)
 
-# --- CSS (STYL I POZYCJONOWANIE) ---
+# --- CSS ---
 st.markdown("""
 <style>
 /* Kontener slidera */
@@ -41,11 +41,11 @@ st.markdown("""
     border-radius: 12px;
 }
 
-/* Krokodyl - Pozycjonowanie (Lewy Dolny Róg) */
+/* Krokodyl - Pozycjonowanie (POPRAWIONE DLA SMARTFONÓW) */
 .croc-absolute {
     position: absolute;
     bottom: -20px; 
-    left: -100px;   
+    left: -20px;   /* Zmieniono z -100px na -20px, aby przesunąć w prawo */
     width: 160px;  
     height: auto;
     z-index: 3; 
@@ -78,6 +78,8 @@ st.markdown("""
 .info-box {background-color: #262730; padding: 12px; border-left: 3px solid #00AAFF; border-radius: 5px; margin-bottom: 15px; font-size: 13px; line-height: 1.4;}
 .info-title {font-weight: bold; color: #00AAFF; margin-bottom: 5px; display: block;}
 [data-testid="column"] { display: flex; align-items: center; justify-content: center; }
+/* Przycisk Primary - pogrubienie i styl */
+div.stButton > button:first-child { font-weight: bold; border-radius: 8px; }
 </style>
 """, unsafe_allow_html=True)
 
@@ -253,29 +255,17 @@ def get_link(ticker):
     if ".WA" in ticker: return f"https://www.biznesradar.pl/notowania/{ticker.replace('.WA', '')}"
     return f"https://finance.yahoo.com/quote/{ticker}"
 
-# --- RENDEROWANIE KROKODYLA (OBRAZEK Z PNG/JPG) ---
+# --- RENDEROWANIE KROKODYLA ---
 def render_strong_buy_section(best_pick):
     if not best_pick:
         st.info("Brak 'Strong Buy' w tej grupie.")
         return
 
-    # Szukamy pliku (priorytet dla nowej nazwy)
-    img_b64 = None
-    check_files = ["krokodyl_poleca_wipe_bg.png", "krokodyl_poleca_wipe_bg.jpg", "krokodyl_poleca.png", "krokodyl.png"]
-    
-    found_file = False
-    for f in check_files:
-        if os.path.exists(f):
-            img_b64 = get_img_as_base64(f)
-            mime = "png" if f.endswith(".png") else "jpeg"
-            found_file = True
-            break
-    
-    if img_b64:
-        croc_src = f"data:image/{mime};base64,{img_b64}"
-    else:
-        # Backup
-        croc_src = "https://cdn-icons-png.flaticon.com/512/2328/2328979.png"
+    if os.path.exists("krokodyl_poleca_wipe_bg.png"): croc_src = "krokodyl_poleca_wipe_bg.png"
+    elif os.path.exists("krokodyl_poleca_wipe_bg.jpg"): croc_src = "krokodyl_poleca_wipe_bg.jpg"
+    elif os.path.exists("krokodyl_poleca.png"): croc_src = "krokodyl_poleca.png"
+    elif os.path.exists("krokodyl.png"): croc_src = "krokodyl.png"
+    else: croc_src = "https://cdn-icons-png.flaticon.com/512/2328/2328979.png"
 
     e = best_pick
     logo_div = f'<div class="logo-container"><img src="{e["logo"]}" class="big-logo"></div>' if e['logo'] else '<div class="logo-container" style="height:60px;"></div>'
@@ -286,7 +276,7 @@ def render_strong_buy_section(best_pick):
 
 # --- UI ---
 with st.sidebar:
-    st.header("KOLgejt 27.0")
+    st.header("KOLgejt 28.1")
     market_choice = st.radio("Giełda:", ["🇺🇸 S&P 500", "💻 Nasdaq 100", "🇵🇱 GPW (WIG20 + mWIG40)"])
     st.divider()
     
@@ -314,7 +304,9 @@ with st.sidebar:
 c1, c2 = st.columns([3,1])
 with c1: st.title("📈 KOLgejt")
 with c2: 
-    if st.button("🔄 Odśwież"): st.rerun()
+    # NOWOCZESNY PRZYCISK ODŚWIEŻANIA
+    if st.button("⚡ ODŚWIEŻ DANE", type="primary", use_container_width=True):
+        st.rerun()
 
 if "GPW" in market_choice: market="GPW"; tickers_scan=get_full_tickers_v11("GPW"); tickers_fund=POOL_GPW
 elif "Nasdaq" in market_choice: market="Nasdaq 100"; tickers_scan=get_full_tickers_v11("Nasdaq 100"); tickers_fund=POOL_NASDAQ
