@@ -15,19 +15,24 @@ warnings.simplefilter(action='ignore', category=FutureWarning)
 # --- CSS ---
 st.markdown("""
 <style>
-.scroll-container {display: flex; overflow-x: auto; gap: 15px; padding: 10px 5px; width: 100%; scrollbar-width: thin; scrollbar-color: #555 #1E1E1E;}
+/* Kontener slidera */
+.scroll-container {display: flex; overflow-x: auto; gap: 15px; padding: 15px 5px; width: 100%; scrollbar-width: thin; scrollbar-color: #555 #1E1E1E;}
+
+/* Bazowa karta */
 .webull-card {flex: 0 0 auto; background-color: #262730; border-radius: 12px; border: 1px solid #41424C; overflow: visible; position: relative;}
+
+/* Mniejsza karta dla slidera */
 .slider-card {width: 250px; font-size: 11px;}
 
-/* Kontener centrujący */
+/* Wrapper centrujący kartę Strong Buy */
 .strong-buy-wrapper {
     position: relative;
     width: 320px; 
-    margin: 20px auto; 
+    margin: 20px auto; /* Centrowanie */
     display: block;
 }
 
-/* Karta Strong Buy */
+/* Styl głównej karty Strong Buy */
 .strong-buy-card-style {
     width: 100%; 
     border: 2px solid #FFD700;
@@ -35,23 +40,23 @@ st.markdown("""
     z-index: 2; 
     background-color: #262730;
     border-radius: 12px;
-    position: relative; /* Ważne dla z-index */
+    position: relative;
 }
 
-/* Krokodyl - POPRAWIONA POZYCJA */
+/* Krokodyl - OSTATECZNA POPRAWKA POZYCJI */
 .croc-absolute {
     position: absolute;
-    bottom: -10px;   /* Mniej w dół */
-    left: -70px;     /* Bliżej karty */
-    width: 120px;    /* Mniejszy rozmiar */
+    bottom: -25px;   /* Lekko wystaje w dół */
+    left: -25px;     /* Przesunięty w prawo, nachodzi na róg karty (nie utnie go na telefonie) */
+    width: 150px;    /* Rozmiar optymalny */
     height: auto;
     z-index: 3; 
-    filter: drop-shadow(3px 3px 5px rgba(0,0,0,0.5)); 
+    filter: drop-shadow(4px 4px 6px rgba(0,0,0,0.6)); 
     pointer-events: none;
-    display: block;
+    transform: rotate(-5deg); /* Lekki obrót "naklejkowy" */
 }
 
-/* Reszta styli */
+/* Pozostałe style */
 .mini-card {flex: 0 0 auto; background-color: #1E1E1E; border-radius: 8px; width: 160px; padding: 10px; text-align: center; border: 1px solid #333; box-shadow: 0 2px 5px rgba(0,0,0,0.3); transition: transform 0.2s;}
 .mini-card:hover {transform: scale(1.03); border-color: #555;}
 .mini-card-up {border-top: 3px solid #00FF00;}
@@ -76,6 +81,8 @@ st.markdown("""
 .info-box {background-color: #262730; padding: 12px; border-left: 3px solid #00AAFF; border-radius: 5px; margin-bottom: 15px; font-size: 13px; line-height: 1.4;}
 .info-title {font-weight: bold; color: #00AAFF; margin-bottom: 5px; display: block;}
 [data-testid="column"] { display: flex; align-items: center; justify-content: center; }
+/* Przycisk Primary */
+div.stButton > button:first-child { font-weight: bold; border-radius: 8px; }
 </style>
 """, unsafe_allow_html=True)
 
@@ -93,24 +100,13 @@ def format_large_num(num):
     if num > 1e6: return f"{num/1e6:.2f}M"
     return f"{num:.2f}"
 
-# --- DIAGNOSTYKA OBRAZKA ---
-def get_local_image():
-    # Lista plików do sprawdzenia
-    files = ["krokodyl_poleca.jpg", "krokodyl_poleca.png", "krokodyl.jpg", "krokodyl.png"]
-    for f in files:
-        if os.path.exists(f):
-            try:
-                with open(f, "rb") as image_file:
-                    encoded_string = base64.b64encode(image_file.read()).decode()
-                ext = "png" if f.endswith(".png") else "jpeg"
-                return f"data:image/{ext};base64,{encoded_string}", f"✅ Załadowano: {f}"
-            except Exception as e:
-                return None, f"❌ Błąd odczytu: {f}"
-    
-    return "https://cdn-icons-png.flaticon.com/512/2328/2328979.png", "⚠️ Nie znaleziono pliku lokalnego. Używam zapasowego."
-
-# Globalne ładowanie obrazka
-CROC_SRC, CROC_MSG = get_local_image()
+# --- FUNKCJA DO KODOWANIA OBRAZKA NA BASE64 ---
+def get_img_as_base64(file_path):
+    try:
+        with open(file_path, "rb") as f:
+            data = f.read()
+        return base64.b64encode(data).decode()
+    except: return None
 
 @st.cache_data(ttl=3600)
 def get_full_tickers_v11(market):
@@ -262,42 +258,37 @@ def get_link(ticker):
     if ".WA" in ticker: return f"https://www.biznesradar.pl/notowania/{ticker.replace('.WA', '')}"
     return f"https://finance.yahoo.com/quote/{ticker}"
 
-# --- RENDEROWANIE KROKODYLA (ZE STRUKTURĄ WRAPPERA) ---
+# --- RENDEROWANIE KROKODYLA (POPRAWIONE POZYCJONOWANIE) ---
 def render_strong_buy_section(best_pick):
     if not best_pick:
         st.info("Brak 'Strong Buy' w tej grupie.")
         return
 
+    # Auto-detekcja nazwy pliku
+    img_b64 = None
+    files = ["krokodyl_poleca.jpg", "krokodyl_poleca_wipe_bg.png", "krokodyl_poleca_wipe_bg.jpg", "krokodyl_poleca.png", "krokodyl.png"]
+    
+    for f in files:
+        if os.path.exists(f):
+            img_b64 = get_img_as_base64(f)
+            mime = "png" if f.endswith(".png") else "jpeg"
+            break
+    
+    if img_b64:
+        croc_src = f"data:image/{mime};base64,{img_b64}"
+    else:
+        croc_src = "https://cdn-icons-png.flaticon.com/512/2328/2328979.png"
+
     e = best_pick
     logo_div = f'<div class="logo-container"><img src="{e["logo"]}" class="big-logo"></div>' if e['logo'] else '<div class="logo-container" style="height:60px;"></div>'
     
-    # Konstrukcja HTML z krokodylem pozycjonowanym absolutnie
-    html_code = f"""
-    <div class="strong-buy-wrapper">
-        <img src="{CROC_SRC}" class="croc-absolute">
-        <div class="webull-card strong-buy-card-style">
-            <div class="badge">STRONG BUY</div>
-            <div class="card-header"><a href="{e["link"]}" target="_blank">{e["ticker"].replace(".WA","")} 🔗</a></div>
-            <table class="webull-table">
-                <thead><tr><th>Cel Cenowy</th><th>Potencjał</th><th>Wzrost EPS</th></tr></thead>
-                <tbody>
-                    <tr>
-                        <td>{e["target_price"]}</td>
-                        <td class="text-green">+{e["upside"]:.1f}%</td>
-                        <td class="{e["g_eps_cls"]}">{e["earn_growth"]}%</td>
-                    </tr>
-                </tbody>
-            </table>
-            {logo_div}
-            <div class="bottom-stats" style="text-align:center;">Rekomendacja: <strong>STRONG BUY</strong><br>EPS Est: {e["eps_est"]}</div>
-        </div>
-    </div>
-    """
+    html_code = f"""<div class="strong-buy-wrapper"><img src="{croc_src}" class="croc-absolute"><div class="webull-card strong-buy-card-style"><div class="badge">STRONG BUY</div><div class="card-header"><a href="{e["link"]}" target="_blank">{e["ticker"].replace(".WA","")} 🔗</a></div><table class="webull-table"><thead><tr><th>Cel Cenowy</th><th>Potencjał</th><th>Wzrost EPS</th></tr></thead><tbody><tr><td>{e["target_price"]}</td><td class="text-green">+{e["upside"]:.1f}%</td><td class="{e["g_eps_cls"]}">{e["earn_growth"]}%</td></tr></tbody></table>{logo_div}<div class="bottom-stats" style="text-align:center;">Rekomendacja: <strong>STRONG BUY</strong><br>EPS Est: {e["eps_est"]}</div></div></div>"""
+    
     st.markdown(html_code, unsafe_allow_html=True)
 
 # --- UI ---
 with st.sidebar:
-    st.header("KOLgejt 29.0")
+    st.header("KOLgejt 30.0")
     market_choice = st.radio("Giełda:", ["🇺🇸 S&P 500", "💻 Nasdaq 100", "🇵🇱 GPW (WIG20 + mWIG40)"])
     st.divider()
     
@@ -320,18 +311,13 @@ with st.sidebar:
     st.write("")
     params['use_vol'] = st.checkbox("🎯 Wymagaj wolumenu", value=False, help="Zaznacz, aby odsiać spółki z małym obrotem.")
     
-    # Status obrazka
-    if "❌" in CROC_MSG or "⚠️" in CROC_MSG:
-        st.error(CROC_MSG)
-    else:
-        st.success(CROC_MSG)
-        
     st.caption(f"Aktualizacja: {datetime.now().strftime('%H:%M')}")
 
 c1, c2 = st.columns([3,1])
 with c1: st.title("📈 KOLgejt")
 with c2: 
-    if st.button("🔄 Odśwież"): st.rerun()
+    if st.button("⚡ ODŚWIEŻ DANE", type="primary", use_container_width=True):
+        st.rerun()
 
 if "GPW" in market_choice: market="GPW"; tickers_scan=get_full_tickers_v11("GPW"); tickers_fund=POOL_GPW
 elif "Nasdaq" in market_choice: market="Nasdaq 100"; tickers_scan=get_full_tickers_v11("Nasdaq 100"); tickers_fund=POOL_NASDAQ
