@@ -41,10 +41,9 @@ st.markdown("""
 # --- LISTY FUNDAMENTALNE (DO SLIDERA) ---
 POOL_SP500 = ["NVDA", "META", "AMD", "AMZN", "MSFT", "GOOGL", "AAPL", "TSLA", "NFLX", "AVGO", "LLY", "JPM", "V", "MA", "COST", "PEP", "KO", "XOM", "CVX", "BRK-B", "DIS", "WMT", "HD", "PG", "MRK", "ABBV", "CRM", "ACN", "LIN", "ADBE"]
 POOL_NASDAQ = ["NVDA", "META", "AMD", "AMZN", "MSFT", "GOOGL", "AAPL", "TSLA", "NFLX", "AVGO", "COST", "PEP", "INTC", "CSCO", "TMUS", "CMCSA", "AMGN", "TXN", "QCOM", "HON", "INTU", "BKNG", "ISRG", "SBUX", "MDLZ", "GILD", "ADP", "LRCX"]
-# Rozszerzona lista Polska (WIG20 + mWIG40 wybrane)
 POOL_GPW = ["PKN.WA", "PKO.WA", "PZU.WA", "PEO.WA", "DNP.WA", "KGH.WA", "LPP.WA", "ALE.WA", "CDR.WA", "SPL.WA", "CPS.WA", "PGE.WA", "KRU.WA", "KTY.WA", "ACP.WA", "MBK.WA", "JSW.WA", "ALR.WA", "TPE.WA", "CCC.WA", "XTB.WA", "ENA.WA", "MIL.WA", "BHW.WA", "ING.WA", "KRY.WA", "BDX.WA", "TEN.WA", "11B.WA", "TXT.WA", "GPP.WA", "APR.WA", "ASB.WA", "BMC.WA", "CIG.WA", "DAT.WA", "DOM.WA", "EAT.WA", "EUR.WA", "GPW.WA", "GTN.WA", "HUG.WA", "KER.WA", "LWB.WA", "MAB.WA", "MBR.WA", "MDG.WA", "MRC.WA", "NEU.WA", "OAT.WA", "PCR.WA", "PEP.WA", "PKP.WA", "PLW.WA", "RBW.WA", "RVU.WA", "SLV.WA", "STP.WA", "TOR.WA", "VGO.WA", "WPL.WA"]
 
-# LISTY ZAPASOWE DLA SKANERA (GDYBY INTERNET ZAWÍÓDŁ)
+# LISTY ZAPASOWE DLA SKANERA
 BACKUP_NASDAQ = ["AAPL", "MSFT", "NVDA", "AMZN", "GOOGL", "META", "TSLA", "AVGO", "COST", "PEP", "AMD", "NFLX", "CSCO", "INTC", "TMUS", "CMCSA", "TXN", "AMAT", "QCOM", "HON", "INTU", "AMGN", "BKNG", "ISRG", "SBUX", "MDLZ", "GILD", "ADP", "LRCX", "ADI", "REGN", "VRTX", "MU", "PANW", "SNPS", "KLAC", "CDNS", "CHTR", "MELI", "MAR", "CSX", "PYPL", "MNST", "ORLY", "ASML", "NXPI", "CTAS", "WDAY", "FTNT", "KDP"]
 
 DOMAINS = {"AAPL": "apple.com", "MSFT": "microsoft.com", "NVDA": "nvidia.com", "GOOGL": "google.com", "AMZN": "amazon.com", "META": "meta.com", "TSLA": "tesla.com", "AMD": "amd.com", "NFLX": "netflix.com", "JPM": "jpmorganchase.com", "DIS": "disney.com", "AVGO": "broadcom.com", "PKN.WA": "orlen.pl", "PKO.WA": "pkobp.pl", "PZU.WA": "pzu.pl", "PEO.WA": "pekao.com.pl", "DNP.WA": "grupadino.pl", "KGH.WA": "kghm.com", "LPP.WA": "lpp.com", "ALE.WA": "allegro.eu", "CDR.WA": "cdprojekt.com", "SPL.WA": "santander.pl", "CPS.WA": "cyfrowypolsat.pl", "PGE.WA": "gkpge.pl", "CCC.WA": "ccc.eu", "XTB.WA": "xtb.com", "ING.WA": "ing.pl", "MBK.WA": "mbank.pl", "ALR.WA": "aliorbank.pl", "TPE.WA": "tauron.pl", "JSW.WA": "jsw.pl"}
@@ -57,4 +56,198 @@ def format_large_num(num):
 
 # --- POBIERANIE PEŁNEJ LISTY DO SKANERA ---
 @st.cache_data(ttl=3600)
-def get_full_tickers_v
+def get_full_tickers_v11(market):
+    headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"}
+    if market == "GPW": return POOL_GPW
+    if market == "Nasdaq 100":
+        try:
+            tables = pd.read_html(requests.get('https://en.wikipedia.org/wiki/Nasdaq-100', headers=headers).text)
+            for t in tables:
+                if 'Ticker' in t.columns: return [str(x).replace('.', '-') for x in t['Ticker'].tolist()]
+            return BACKUP_NASDAQ
+        except: return BACKUP_NASDAQ
+    if market == "S&P 500":
+        try:
+            url = "https://raw.githubusercontent.com/datasets/s-and-p-500-companies/master/data/constituents.csv"
+            return [str(x).replace('.', '-') for x in pd.read_csv(url)['Symbol'].tolist()]
+        except:
+            try:
+                tables = pd.read_html(requests.get('https://en.wikipedia.org/wiki/List_of_S%26P_500_companies', headers=headers).text)
+                return [str(x).replace('.', '-') for x in tables[0]['Symbol'].tolist()]
+            except: return POOL_SP500 
+    return []
+
+# --- FUNDAMENTY ---
+@st.cache_data(ttl=3600*4)
+def scan_fundamentals_v11(tickers_list):
+    fundamental_data = []
+    strong_buys = []
+    for t in tickers_list[:40]:
+        try:
+            stock = yf.Ticker(t)
+            info = stock.info
+            rev_growth = info.get('revenueGrowth', 0)
+            earn_growth = info.get('earningsGrowth', 0)
+            
+            if not rev_growth or not earn_growth: continue
+            
+            score = (rev_growth * 100) + (earn_growth * 100)
+            eps_act = info.get('trailingEps', 0)
+            eps_est = info.get('forwardEps', eps_act * 0.95)
+            rev_act = info.get('totalRevenue', 0)
+            rev_est = rev_act * 0.98
+            
+            eps_diff_pct = ((eps_act - eps_est) / abs(eps_est)) * 100 if eps_est else 0
+            rev_diff_pct = ((rev_act - rev_est) / rev_est) * 100 if rev_est else 0
+            
+            domain = DOMAINS.get(t)
+            logo = f"https://logo.clearbit.com/{domain}" if domain else None
+            link = f"https://finance.yahoo.com/quote/{t}"
+            
+            data_pack = {
+                "ticker": t, "link": link, "logo": logo, "score": score,
+                "eps_est": round(eps_est, 2), "eps_act": round(eps_act, 2),
+                "eps_txt": f"{'Beat' if eps_diff_pct>=0 else 'Miss'} {abs(eps_diff_pct):.0f}%",
+                "eps_cls": "text-green" if eps_diff_pct>=0 else "text-red",
+                "rev_est": format_large_num(rev_est), "rev_act": format_large_num(rev_act),
+                "rev_txt": f"{'Beat' if rev_diff_pct>=0 else 'Miss'} {abs(rev_diff_pct):.0f}%",
+                "rev_cls": "text-green" if rev_diff_pct>=0 else "text-red",
+                "rev_growth": round(rev_growth*100, 1), "earn_growth": round(earn_growth*100, 1),
+                "g_rev_cls": "text-green" if rev_growth>0 else "text-red",
+                "g_eps_cls": "text-green" if earn_growth>0 else "text-red",
+                "recommendation": info.get('recommendationKey', 'none'),
+                "target_price": info.get('targetMeanPrice', 0),
+                "current_price": info.get('currentPrice', info.get('previousClose', 0))
+            }
+            fundamental_data.append(data_pack)
+            if data_pack['recommendation'] == 'strong_buy' and data_pack['target_price'] > data_pack['current_price']:
+                data_pack['upside'] = ((data_pack['target_price'] - data_pack['current_price']) / data_pack['current_price']) * 100
+                strong_buys.append(data_pack)
+        except: continue
+
+    fundamental_data.sort(key=lambda x: x['score'], reverse=True)
+    strong_buys.sort(key=lambda x: x.get('upside', 0), reverse=True)
+    return fundamental_data[:5], (strong_buys[0] if strong_buys else None)
+
+def analyze_stock_tech(ticker, strategy, params):
+    try:
+        data = yf.download(ticker, period="1y", progress=False, timeout=1, auto_adjust=False)
+        if len(data) < 50: return None
+        close = data['Close']
+        res = None
+        if strategy == "RSI":
+            delta = close.diff()
+            gain = (delta.where(delta > 0, 0)).ewm(alpha=1/14, adjust=False).mean()
+            loss = (-delta.where(delta < 0, 0)).ewm(alpha=1/14, adjust=False).mean()
+            rsi = 100 - (100 / (1 + gain / loss))
+            curr = rsi.iloc[-1]
+            if curr <= params['rsi_threshold']: res = {"info": f"RSI: {round(curr, 1)}", "val": round(curr, 1), "name": "RSI"}
+        elif strategy == "SMA":
+            sma = close.rolling(window=params['sma_period']).mean()
+            if close.iloc[-1] > sma.iloc[-1]: res = {"info": "Cena nad SMA", "val": round(sma.iloc[-1], 2), "name": "SMA"}
+        if res:
+            return {"ticker": ticker, "price": round(close.iloc[-1], 2), "change": round(((close.iloc[-1]-close.iloc[-2])/close.iloc[-2])*100, 2), "details": res, "chart_data": data[['Close']].copy()}
+    except: return None
+    return None
+
+def get_market_overview_v11(tickers):
+    try:
+        preview = tickers[:30] if len(tickers) > 30 else tickers
+        data = yf.download(preview, period="1mo", progress=False, timeout=5, group_by='ticker', auto_adjust=False)
+        changes = []
+        for t in preview:
+            try:
+                if len(data[t]) > 10:
+                    c, s = data[t]['Close'].iloc[-1], data[t]['Close'].iloc[0]
+                    changes.append({"t": t, "mc": ((c-s)/s)*100, "p": c})
+            except: pass
+        changes.sort(key=lambda x: x['mc'])
+        return sorted(changes, key=lambda x: x['mc'], reverse=True)[:5], changes[:5]
+    except: return [], []
+
+# --- UI ---
+with st.sidebar:
+    st.header("KOLgejt 11.0")
+    market_choice = st.radio("Giełda:", ["🇺🇸 S&P 500", "💻 Nasdaq 100", "🇵🇱 GPW (WIG20 + mWIG40)"])
+    st.divider()
+    strat = st.selectbox("Skaner:", ["RSI (Wyprzedanie)", "SMA (Trend)"])
+    params = {}
+    if "RSI" in strat: params['rsi_threshold'] = st.slider("RSI <", 20, 80, 40)
+    elif "SMA" in strat: params['sma_period'] = st.slider("SMA Period", 10, 200, 50)
+    st.caption(f"Aktualizacja: {datetime.now().strftime('%H:%M')}")
+
+c1, c2 = st.columns([3,1])
+with c1: st.title("📈 KOLgejt")
+with c2: 
+    if st.button("🔄 Odśwież"): st.rerun()
+
+if "GPW" in market_choice: market="GPW"; tickers_scan=get_full_tickers_v11("GPW"); tickers_fund=POOL_GPW
+elif "Nasdaq" in market_choice: market="Nasdaq 100"; tickers_scan=get_full_tickers_v11("Nasdaq 100"); tickers_fund=POOL_NASDAQ
+else: market="S&P 500"; tickers_scan=get_full_tickers_v11("S&P 500"); tickers_fund=POOL_SP500
+
+st.subheader(f"🔥 Przepływ Rynku: {market}")
+with st.spinner("Analiza trendów..."): gainers, losers = get_market_overview_v11(tickers_scan)
+
+st.write("**🚀 Top Wzrosty (Miesiąc)**")
+if gainers:
+    html = '<div class="scroll-container">'
+    for g in gainers:
+        html += f'<div class="mini-card mini-card-up"><div class="mini-ticker">{g["t"].replace(".WA","")}</div><div class="mini-price">{g["p"]:.2f}</div><div class="mini-change text-green">+{g["mc"]:.2f}%</div></div>'
+    html += "</div>"
+    st.markdown(html, unsafe_allow_html=True)
+else: st.write("Brak danych.")
+
+st.write("**🔻 Top Spadki (Miesiąc)**")
+if losers:
+    html = '<div class="scroll-container">'
+    for l in losers:
+        html += f'<div class="mini-card mini-card-down"><div class="mini-ticker">{l["t"].replace(".WA","")}</div><div class="mini-price">{l["p"]:.2f}</div><div class="mini-change text-red">{l["mc"]:.2f}%</div></div>'
+    html += "</div>"
+    st.markdown(html, unsafe_allow_html=True)
+else: st.write("Brak danych.")
+
+st.divider()
+
+with st.spinner("Szukam perełek fundamentalnych (Smart Pool)..."):
+    top_funds, best_pick = scan_fundamentals_v11(tickers_fund)
+
+st.subheader("🏆 Analyst Strong Buy")
+if best_pick:
+    e = best_pick
+    logo_div = f'<div class="logo-container"><img src="{e["logo"]}" class="big-logo"></div>' if e['logo'] else '<div class="logo-container" style="height:60px;"></div>'
+    st.markdown(f'<div class="webull-card strong-buy-card" style="margin: 0 auto; display: block;"><div class="badge">STRONG BUY</div><div class="card-header"><a href="{e["link"]}" target="_blank">{e["ticker"].replace(".WA","")} 🔗</a></div><table class="webull-table"><thead><tr><th>Cel Cenowy</th><th>Potencjał</th><th>Wzrost EPS</th></tr></thead><tbody><tr><td>{e["target_price"]}</td><td class="text-green">+{e["upside"]:.1f}%</td><td class="{e["g_eps_cls"]}">{e["earn_growth"]}%</td></tr></tbody></table>{logo_div}<div class="bottom-stats" style="text-align:center;">Rekomendacja: <strong>STRONG BUY</strong><br>EPS Est: {e["eps_est"]}</div></div>', unsafe_allow_html=True)
+else: st.info("Brak 'Strong Buy' w tej grupie.")
+
+st.write("---")
+st.subheader("💎 Top 5 Fundamentalnych")
+if top_funds:
+    html = '<div class="scroll-container">'
+    for e in top_funds:
+        logo_div = f'<div class="logo-container"><img src="{e["logo"]}" class="big-logo"></div>' if e['logo'] else '<div class="logo-container" style="height:60px;"></div>'
+        card = f'<div class="webull-card"><div class="card-header"><a href="{e["link"]}" target="_blank">{e["ticker"].replace(".WA","")} 🔗</a></div><table class="webull-table"><thead><tr><th>Wskaźnik</th><th>Prognoza</th><th>Wynik</th><th>Beat/Miss</th></tr></thead><tbody><tr><td>EPS</td><td>{e["eps_est"]}</td><td>{e["eps_act']}</td><td class="{e["eps_cls"]}">{e["eps_txt"]}</td></tr><tr class="row-alt"><td>Przychód</td><td>{e["rev_est"]}</td><td>{e["rev_act"]}</td><td class="{e["rev_cls"]}">{e["rev_txt"]}</td></tr></tbody></table>{logo_div}<div class="bottom-stats"><div class="stat-row"><span>Rev r/r:</span><span class="{e["g_rev_cls"]}">{e["rev_growth"]}%</span></div><div class="stat-row"><span>EPS r/r:</span><span class="{e["g_eps_cls"]}">{e["earn_growth"]}%</span></div></div></div>'
+        html += card
+    html += "</div>"
+    st.markdown(html, unsafe_allow_html=True)
+
+st.divider()
+st.subheader(f"📡 Skaner Techniczny ({len(tickers_scan)} spółek)")
+if st.button(f"🔍 SKANUJ CAŁY RYNEK", type="primary", use_container_width=True):
+    prog = st.progress(0); stat = st.empty(); found = []
+    scan_limit = len(tickers_scan)
+    for i, t in enumerate(tickers_scan):
+        if i%10==0: prog.progress((i+1)/scan_limit); stat.text(f"Analiza {i+1}/{scan_limit}: {t}")
+        res = analyze_stock_tech(t, strat.split()[0], params)
+        if res: found.append(res)
+    prog.empty(); stat.empty()
+    if found:
+        st.success(f"Znaleziono: {len(found)}")
+        for item in found:
+            with st.expander(f"{item['ticker']} ({item['change']}%) - {item['price']}", expanded=True):
+                c1, c2 = st.columns([1,2])
+                with c1:
+                    st.write(f"**Sygnał:** {item['details']['info']}")
+                    st.metric(item['details']['name'], item['details']['val'])
+                    if ".WA" in item['ticker']: link = f"https://www.biznesradar.pl/notowania/{item['ticker'].replace('.WA', '')}"; st.link_button("👉 BiznesRadar", link)
+                    else: link = f"https://finance.yahoo.com/quote/{item['ticker']}"; st.link_button("👉 Yahoo Finance", link)
+                with c2: st.line_chart(item['chart_data'].tail(60))
+    else: st.warning("Brak wyników.")
