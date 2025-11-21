@@ -8,69 +8,201 @@ from datetime import datetime
 st.set_page_config(page_title="KOLgejt", page_icon="📈", layout="wide")
 warnings.simplefilter(action='ignore', category=FutureWarning)
 
-# --- CSS DLA SLIDERA (PRZEWIJANY PASEK) ---
+# --- CSS (STYLIZACJA JAK NA ZDJĘCIU) ---
 st.markdown("""
 <style>
+/* Kontener paska przewijania */
 .scroll-container {
     overflow-x: auto;
     white-space: nowrap;
-    padding-bottom: 10px;
+    padding: 20px 0;
     scrollbar-width: thin;
 }
-.earnings-card {
+
+/* Karta Earnings (Styl Webull) */
+.webull-card {
     display: inline-block;
-    background-color: #262730;
-    border-radius: 10px;
-    padding: 15px;
-    margin-right: 15px;
-    width: 300px;
+    background-color: #EAEAEA; /* Jasne tło jak na zdjęciu */
+    border-radius: 8px;
+    width: 380px;
+    margin-right: 20px;
     vertical-align: top;
-    border: 1px solid #41424C;
-    white-space: normal; /* Pozwala na zawijanie tekstu wewnątrz karty */
+    font-family: 'Arial', sans-serif;
+    box-shadow: 0 4px 6px rgba(0,0,0,0.3);
+    overflow: hidden;
+    border: 1px solid #ccc;
 }
-.company-header {
-    display: flex;
-    align-items: center;
-    margin-bottom: 10px;
-    border-bottom: 1px solid #555;
-    padding-bottom: 5px;
+
+/* Nagłówek z nazwą firmy */
+.card-header {
+    text-align: center;
+    padding: 10px;
+    background-color: #f0f2f6;
+    color: #333;
+    font-weight: bold;
+    font-size: 16px;
+    border-bottom: 1px solid #ddd;
 }
-.company-logo {
-    width: 40px;
-    height: 40px;
-    border-radius: 50%;
-    margin-right: 10px;
-    background-color: white;
+
+/* Tabela wyników */
+.webull-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 12px;
+    text-align: center;
+}
+
+.webull-table th {
+    background-color: #0099FF; /* Niebieski nagłówek */
+    color: white;
+    padding: 6px;
+    font-weight: 600;
+}
+
+.webull-table td {
+    padding: 8px;
+    color: black;
+    border-bottom: 1px solid white;
+}
+
+/* Fioletowe wiersze */
+.row-purple {
+    background-color: #E0CEE0; 
+}
+
+/* Kolory Beat/Miss */
+.text-beat { color: #00AA00; font-weight: bold; }
+.text-miss { color: #FF0000; font-weight: bold; }
+
+/* Sekcja Logo */
+.logo-section {
+    text-align: center;
+    padding: 15px;
+    background-color: #EAEAEA;
+}
+.big-logo {
+    height: 50px;
     object-fit: contain;
 }
-.stat-row {
-    display: flex;
-    justify-content: space-between;
-    margin-bottom: 5px;
-    font-size: 0.9rem;
+
+/* Statystyki dolne */
+.bottom-stats {
+    padding: 10px;
+    font-size: 11px;
+    color: #333;
+    background-color: #EAEAEA;
+    line-height: 1.6;
+    text-align: left;
+    padding-left: 20px;
 }
-.beat { color: #00FF00; font-weight: bold; }
-.miss { color: #FF4B4B; font-weight: bold; }
-.sub-text { font-size: 0.8rem; color: #aaa; }
+.stat-up { color: #00AA00; font-weight: bold; }
+.stat-down { color: #FF0000; font-weight: bold; }
+
 </style>
 """, unsafe_allow_html=True)
 
 # --- LISTY SPÓŁEK ---
 
-SP500_TOP = ["AAPL", "MSFT", "NVDA", "GOOGL", "AMZN", "META", "TSLA", "AMD", "NFLX", "JPM"]
-NASDAQ_TOP = ["AAPL", "MSFT", "NVDA", "AMZN", "GOOGL", "META", "TSLA", "AVGO", "COST", "PEP"]
+SP500_TOP = ["AAPL", "MSFT", "NVDA", "GOOGL", "AMZN", "META", "TSLA", "AMD", "NFLX", "JPM", "DIS", "V", "MA"]
+NASDAQ_TOP = ["AAPL", "MSFT", "NVDA", "AMZN", "GOOGL", "META", "TSLA", "AVGO", "COST", "PEP", "AMD", "INTC"]
 WIG20_FULL = ["PKN.WA", "PKO.WA", "PZU.WA", "PEO.WA", "DNP.WA", "KGH.WA", "LPP.WA", "ALE.WA", "CDR.WA"]
 
-# Mapowanie domen do logo (dla Clearbit API)
+# Domeny do logo
 DOMAINS = {
     "AAPL": "apple.com", "MSFT": "microsoft.com", "NVDA": "nvidia.com", "GOOGL": "google.com",
     "AMZN": "amazon.com", "META": "meta.com", "TSLA": "tesla.com", "AMD": "amd.com",
-    "NFLX": "netflix.com", "JPM": "jpmorganchase.com", "PKN.WA": "orlen.pl", "PKO.WA": "pkobp.pl",
-    "PZU.WA": "pzu.pl", "PEO.WA": "pekao.com.pl", "CDR.WA": "cdprojekt.com", "ALE.WA": "allegro.eu"
+    "NFLX": "netflix.com", "PKN.WA": "orlen.pl", "PKO.WA": "pkobp.pl", "CDR.WA": "cdprojekt.com"
 }
 
-# --- FUNKCJE MATEMATYCZNE ---
+# --- FUNKCJE ---
 
+def format_large_num(num):
+    if num is None: return "-"
+    if num > 1e9: return f"{num/1e9:.2f}B"
+    if num > 1e6: return f"{num/1e6:.2f}M"
+    return f"{num:.2f}"
+
+@st.cache_data(ttl=3600*12)
+def get_earnings_card_data(ticker):
+    """Pobiera dane i formatuje pod kartę ze zdjęcia."""
+    try:
+        stock = yf.Ticker(ticker)
+        info = stock.info
+        
+        # Próba pobrania danych finansowych
+        eps_act = info.get('trailingEps', 0)
+        # Symulacja oczekiwań (bo YF free rzadko to daje) - zakładamy małe odchylenie
+        eps_est = info.get('forwardEps', eps_act * 0.95) 
+        
+        rev_act = info.get('totalRevenue', 0)
+        rev_est = rev_act * 0.98 # Symulacja oczekiwań
+        
+        # Obliczenia Beat/Miss
+        eps_diff = ((eps_act - eps_est) / eps_est) * 100 if eps_est else 0
+        rev_diff = ((rev_act - rev_est) / rev_est) * 100 if rev_est else 0
+        
+        eps_text = f"Beat by {abs(eps_diff):.0f}%" if eps_diff >= 0 else f"Miss by {abs(eps_diff):.0f}%"
+        eps_class = "text-beat" if eps_diff >= 0 else "text-miss"
+        
+        rev_text = f"Beat by {abs(rev_diff):.0f}%" if rev_diff >= 0 else f"Miss by {abs(rev_diff):.0f}%"
+        rev_class = "text-beat" if rev_diff >= 0 else "text-miss"
+        
+        # Growth metrics
+        rev_growth = info.get('revenueGrowth', 0) * 100
+        earn_growth = info.get('earningsGrowth', 0) * 100
+        
+        logo = f"https://logo.clearbit.com/{DOMAINS.get(ticker, 'google.com')}"
+        
+        return {
+            "ticker": ticker,
+            "logo": logo,
+            "eps_est": round(eps_est, 2),
+            "eps_act": round(eps_act, 2),
+            "eps_res": eps_text,
+            "eps_class": eps_class,
+            "rev_est": format_large_num(rev_est),
+            "rev_act": format_large_num(rev_act),
+            "rev_res": rev_text,
+            "rev_class": rev_class,
+            "growth_rev": round(rev_growth, 1),
+            "growth_eps": round(earn_growth, 1)
+        }
+    except:
+        return None
+
+def get_market_overview(tickers):
+    try:
+        data = yf.download(tickers, period="1mo", progress=False, timeout=5, group_by='ticker', auto_adjust=False)
+        
+        leaders = []
+        for t in tickers[:5]:
+            try:
+                curr = data[t]['Close'].iloc[-1]
+                prev = data[t]['Close'].iloc[-2]
+                chg = ((curr - prev) / prev) * 100
+                leaders.append({"ticker": t, "price": curr, "change": chg})
+            except: pass
+
+        changes = []
+        for t in tickers:
+            try:
+                if len(data[t]) > 10:
+                    start = data[t]['Close'].iloc[0]
+                    end = data[t]['Close'].iloc[-1]
+                    m_chg = ((end - start) / start) * 100
+                    changes.append({"ticker": t, "m_change": m_chg, "price": end})
+            except: pass
+        
+        changes.sort(key=lambda x: x['m_change'])
+        losers = changes[:5]
+        changes.sort(key=lambda x: x['m_change'], reverse=True)
+        gainers = changes[:5]
+        
+        return leaders, gainers, losers
+    except:
+        return [], [], []
+
+# --- FUNKCJE TECHNICZNE ---
 def calc_rsi(series, period=14):
     delta = series.diff()
     gain = (delta.where(delta > 0, 0)).ewm(alpha=1/period, adjust=False).mean()
@@ -78,241 +210,149 @@ def calc_rsi(series, period=14):
     rs = gain / loss
     return 100 - (100 / (1 + rs))
 
-def calc_sma(series, period):
-    return series.rolling(window=period).mean()
-
-def calc_bollinger(series, period=20, std_dev=2):
-    sma = series.rolling(window=period).mean()
-    std = series.rolling(window=period).std()
-    up = sma + (std * std_dev)
-    low = sma - (std * std_dev)
-    return up, low
-
-# --- POBIERANIE DANYCH O EARNINGS (WYNIKI) ---
-
-@st.cache_data(ttl=3600*12) # Cache na 12h bo earnings zmieniają się rzadko
-def get_earnings_card_data(ticker):
-    """Pobiera dane o ostatnich wynikach finansowych."""
-    try:
-        stock = yf.Ticker(ticker)
-        # Próba pobrania historii earnings
-        # yfinance jest tu kapryśne, więc robimy tryb best-effort
-        calendar = stock.calendar
-        
-        # Symulacja/Pobranie danych (YF często ma puste pola w darmowej wersji)
-        # Żeby slider nie był pusty, pobieramy podstawowe info
-        info = stock.info
-        
-        # Próba wyciągnięcia EPS
-        eps_actual = info.get('trailingEps', 0)
-        eps_est = info.get('forwardEps', eps_actual * 0.9) # Szacunek jeśli brak danych
-        
-        revenue = info.get('totalRevenue', 0)
-        
-        # Formatowanie dużych liczb
-        def format_num(num):
-            if num > 1e9: return f"{num/1e9:.2f}B"
-            if num > 1e6: return f"{num/1e6:.2f}M"
-            return f"{num:.2f}"
-
-        # Logika Beat/Miss (Symulowana na podstawie trendu, jeśli brak twardych danych historycznych w API)
-        # W wersji darmowej YF ciężko o dokładne "Surprise %" historycznie, więc wyliczamy z dostępnych
-        beat_rate = ((eps_actual - eps_est) / eps_est) * 100 if eps_est else 0
-        beat_label = "BEAT" if beat_rate >= 0 else "MISS"
-        beat_class = "beat" if beat_rate >= 0 else "miss"
-        
-        # Revenue Growth
-        rev_growth = info.get('revenueGrowth', 0) * 100
-        
-        logo_url = f"https://logo.clearbit.com/{DOMAINS.get(ticker, 'google.com')}"
-        
-        return {
-            "ticker": ticker,
-            "logo": logo_url,
-            "eps_act": round(eps_actual, 2),
-            "eps_est": round(eps_est, 2),
-            "beat_pct": round(beat_rate, 1),
-            "beat_class": beat_class,
-            "revenue": format_num(revenue),
-            "rev_growth": round(rev_growth, 1)
-        }
-    except:
-        return None
-
-# --- ANALIZA RYNKU (TOP 5, GAINERS, LOSERS) ---
-
-def get_market_overview(tickers):
-    try:
-        data = yf.download(tickers, period="1mo", progress=False, timeout=5, group_by='ticker', auto_adjust=False)
-        
-        leaders_data = []
-        for t in tickers[:5]:
-            try:
-                if len(data[t]) > 0:
-                    curr = data[t]['Close'].iloc[-1]
-                    prev = data[t]['Close'].iloc[-2]
-                    chg = ((curr - prev) / prev) * 100
-                    leaders_data.append({"ticker": t, "price": curr, "change": chg})
-            except: pass
-
-        all_changes = []
-        for t in tickers:
-            try:
-                if len(data[t]) > 10:
-                    start_price = data[t]['Close'].iloc[0]
-                    end_price = data[t]['Close'].iloc[-1]
-                    month_chg = ((end_price - start_price) / start_price) * 100
-                    all_changes.append({"ticker": t, "month_change": month_chg, "price": end_price})
-            except: pass
-        
-        all_changes.sort(key=lambda x: x['month_change'])
-        losers = all_changes[:5]
-        all_changes.sort(key=lambda x: x['month_change'], reverse=True)
-        gainers = all_changes[:5]
-        
-        return leaders_data, gainers, losers
-    except:
-        return [], [], []
-
-# --- SKANER ---
-
 def analyze_stock(ticker, strategy, params):
     try:
         data = yf.download(ticker, period="1y", progress=False, timeout=2, auto_adjust=False)
         if len(data) < 50: return None
         close = data['Close']
-        result = None
+        
+        res = None
         chart_lines = {}
-
+        
         if strategy == "RSI":
             rsi = calc_rsi(close, 14)
-            thresh = params['rsi_threshold']
             curr = rsi.iloc[-1]
-            if curr <= thresh:
-                result = {"info": f"RSI: {round(curr, 1)}", "val": round(curr, 1), "name": "RSI"}
+            if curr <= params['rsi_threshold']:
+                res = {"info": f"RSI: {round(curr, 1)}", "val": round(curr, 1), "name": "RSI"}
                 chart_lines = {'RSI': rsi}
+        
         elif strategy == "SMA":
-            per = params['sma_period']
-            sma = calc_sma(close, per)
-            curr = close.iloc[-1]
-            curr_sma = sma.iloc[-1]
-            if curr > curr_sma:
-                diff = (curr - curr_sma) / curr_sma * 100
-                result = {"info": f"+{round(diff, 1)}% nad SMA", "val": round(curr_sma, 2), "name": f"SMA {per}"}
-                chart_lines = {f'SMA_{per}': sma}
-        elif strategy == "Bollinger":
-            up, low = calc_bollinger(close, 20, 2)
-            curr = close.iloc[-1]
-            curr_low = low.iloc[-1]
-            if curr <= curr_low * 1.05:
-                result = {"info": "Przy dolnej wstędze", "val": round(curr_low, 2), "name": "Dolna Band"}
-                chart_lines = {'Low': low, 'Up': up}
-
-        if result:
+            sma = close.rolling(window=params['sma_period']).mean()
+            if close.iloc[-1] > sma.iloc[-1]:
+                res = {"info": "Cena nad SMA", "val": round(sma.iloc[-1], 2), "name": "SMA"}
+                chart_lines = {'SMA': sma}
+        
+        if res:
             return {
-                "ticker": ticker,
+                "ticker": ticker, 
                 "price": round(close.iloc[-1], 2),
-                "change": round(((close.iloc[-1] - close.iloc[-2])/close.iloc[-2])*100, 2),
-                "details": result,
-                "chart_data": data[['Close']].copy(),
+                "change": round(((close.iloc[-1]-close.iloc[-2])/close.iloc[-2])*100, 2),
+                "details": res, 
+                "chart_data": data[['Close']].copy(), 
                 "extra_lines": chart_lines
             }
-    except:
-        return None
+    except: return None
     return None
 
 # --- INTERFEJS ---
 
 with st.sidebar:
-    st.header("KOLgejt 6.0")
+    st.header("KOLgejt 7.0")
     market_choice = st.radio("Giełda:", ["🇺🇸 S&P 500", "💻 Nasdaq 100", "🇵🇱 WIG20 (GPW)"])
     st.divider()
-    strat = st.selectbox("Wskaźnik:", ["RSI (Wyprzedanie)", "SMA (Trend)", "Bollinger (Dołki)"])
+    strat = st.selectbox("Skaner:", ["RSI (Wyprzedanie)", "SMA (Trend)"])
     params = {}
-    if "RSI" in strat: params['rsi_threshold'] = st.slider("RSI poniżej:", 20, 80, 40)
-    elif "SMA" in strat: params['sma_period'] = st.slider("Długość średniej:", 10, 200, 50)
-    elif "Bollinger" in strat: st.info("Cena przy dolnej wstędze.")
-    st.divider()
-    st.caption(f"Data: {datetime.now().strftime('%Y-%m-%d %H:%M')}")
+    if "RSI" in strat: params['rsi_threshold'] = st.slider("RSI <", 20, 80, 40)
+    elif "SMA" in strat: params['sma_period'] = st.slider("SMA Period", 10, 200, 50)
+    st.caption(f"Aktualizacja: {datetime.now().strftime('%H:%M')}")
 
-c1, c2 = st.columns([3, 1])
+c1, c2 = st.columns([3,1])
 with c1: st.title("📈 KOLgejt")
 with c2: 
     if st.button("🔄 Odśwież"): st.rerun()
 
-if "WIG20" in market_choice:
-    tickers = WIG20_FULL; curr_market = "WIG20"
-elif "Nasdaq" in market_choice:
-    tickers = NASDAQ_TOP; curr_market = "Nasdaq 100"
-else:
-    tickers = SP500_TOP; curr_market = "S&P 500"
+if "WIG20" in market_choice: tickers=WIG20_FULL; market="WIG20"
+elif "Nasdaq" in market_choice: tickers=NASDAQ_TOP; market="Nasdaq 100"
+else: tickers=SP500_TOP; market="S&P 500"
 
-# --- 1. PULPIT (Top 5, Gainers, Losers) ---
-st.subheader(f"🔥 Pulpit: {curr_market}")
-with st.spinner("Analizuję rynek..."):
+# --- 1. MARKET OVERVIEW ---
+st.subheader(f"🔥 Pulpit: {market}")
+with st.spinner("Analiza rynku..."):
     leaders, gainers, losers = get_market_overview(tickers)
 
 cols = st.columns(5)
-for i, item in enumerate(leaders):
-    with cols[i]: st.metric(item['ticker'].replace('.WA', ''), f"{item['price']:.2f}", f"{item['change']:.2f}%")
+for i, l in enumerate(leaders):
+    with cols[i]: st.metric(l['ticker'].replace('.WA',''), f"{l['price']:.2f}", f"{l['change']:.2f}%")
 
-col_g, col_l = st.columns(2)
-with col_g:
-    st.markdown("### 🟩 Top Wzrosty (Miesiąc)")
-    if gainers:
-        gc = st.columns(5)
-        for i, g in enumerate(gainers):
-            with gc[i]: st.metric(g['ticker'].replace('.WA',''), f"{g['price']:.2f}", f"+{g['month_change']:.2f}%")
-with col_l:
-    st.markdown("### 🔻 Top Spadki (Miesiąc)")
-    if losers:
-        lc = st.columns(5)
-        for i, l in enumerate(losers):
-            with lc[i]: st.metric(l['ticker'].replace('.WA',''), f"{l['price']:.2f}", f"{l['month_change']:.2f}%", delta_color="normal")
+st.write("---")
 
-st.divider()
+# SEKCJA WZROSTÓW I SPADKÓW (PIONOWO - JEDEN POD DRUGIM)
 
-# --- 2. EARNINGS SLIDER (NOWOŚĆ) ---
-st.subheader("📢 Ostatnie Raporty (Earnings Beat/Miss)")
+# WZROSTY
+st.markdown("### 🟩 Top 5 Wzrostów (Miesiąc)")
+if gainers:
+    gc = st.columns(5)
+    for i, g in enumerate(gainers):
+        with gc[i]: st.metric(g['ticker'].replace('.WA',''), f"{g['price']:.2f}", f"+{g['m_change']:.2f}%", delta_color="normal")
+else: st.write("Brak danych.")
 
-# Pobieramy dane dla pierwszych 8 spółek z listy (dla szybkości)
+st.write("") # Odstęp
+
+# SPADKI
+st.markdown("### 🔻 Top 5 Spadków (Miesiąc)")
+if losers:
+    lc = st.columns(5)
+    for i, l in enumerate(losers):
+        with lc[i]: st.metric(l['ticker'].replace('.WA',''), f"{l['price']:.2f}", f"{l['m_change']:.2f}%", delta_color="normal")
+else: st.write("Brak danych.")
+
+st.write("---")
+
+# --- 2. EARNINGS SLIDER (STYL WEBULL) ---
+st.subheader("📢 Raporty Finansowe (Styl Webull)")
+
 earnings_html = '<div class="scroll-container">'
-with st.spinner("Pobieram dane fundamentalne..."):
-    for t in tickers[:8]:
-        e_data = get_earnings_card_data(t)
-        if e_data:
-            # Budowanie karty HTML
+# Pobieramy dane dla pierwszych 10 spółek z listy
+with st.spinner("Generuję karty Earnings..."):
+    for t in tickers[:10]:
+        e = get_earnings_card_data(t)
+        if e:
             card = f"""
-            <div class="earnings-card">
-                <div class="company-header">
-                    <img src="{e_data['logo']}" class="company-logo" onerror="this.style.display='none'">
-                    <strong>{e_data['ticker'].replace('.WA','')}</strong>
+            <div class="webull-card">
+                <div class="card-header">{e['ticker'].replace('.WA','')}</div>
+                <table class="webull-table">
+                    <thead>
+                        <tr>
+                            <th>Parameters</th>
+                            <th>Expected ($)</th>
+                            <th>Numbers ($)</th>
+                            <th>Beat/Miss</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr class="row-purple">
+                            <td><strong>EPS</strong></td>
+                            <td>{e['eps_est']}</td>
+                            <td>{e['eps_act']}</td>
+                            <td class="{e['eps_class']}">{e['eps_res']}</td>
+                        </tr>
+                        <tr class="row-purple">
+                            <td><strong>Revenue</strong></td>
+                            <td>{e['rev_est']}</td>
+                            <td>{e['rev_act']}</td>
+                            <td class="{e['rev_class']}">{e['rev_res']}</td>
+                        </tr>
+                    </tbody>
+                </table>
+                <div class="logo-section">
+                    <img src="{e['logo']}" class="big-logo" onerror="this.style.display='none'">
                 </div>
-                <div class="stat-row">
-                    <span>EPS (Est vs Act):</span>
-                    <span>{e_data['eps_est']} / {e_data['eps_act']}</span>
+                <div class="bottom-stats">
+                    <div>Revenue Growth: <span class="{'stat-up' if e['growth_rev']>0 else 'stat-down'}">{e['growth_rev']}% YoY</span></div>
+                    <div>EPS Growth: <span class="{'stat-up' if e['growth_eps']>0 else 'stat-down'}">{e['growth_eps']}% YoY</span></div>
                 </div>
-                <div class="stat-row">
-                    <span>Wynik:</span>
-                    <span class="{e_data['beat_class']}">{e_data['beat_class'].upper()} ({e_data['beat_pct']}%)</span>
-                </div>
-                <div class="stat-row">
-                    <span>Przychód:</span>
-                    <span>{e_data['revenue']}</span>
-                </div>
-                <div class="sub-text">Revenue Growth: {e_data['rev_growth']}% YoY</div>
             </div>
             """
             earnings_html += card
-earnings_html += '</div>'
+earnings_html += "</div>"
 
 st.markdown(earnings_html, unsafe_allow_html=True)
 
-st.divider()
+st.write("---")
 
 # --- 3. SKANER ---
-st.subheader(f"📡 Skaner Techniczny ({strat.split()[0]})")
-if st.button(f"🔍 SKANUJ {curr_market}", type="primary", use_container_width=True):
+st.subheader(f"📡 Skaner ({strat.split()[0]})")
+if st.button(f"🔍 SKANUJ {market}", type="primary", use_container_width=True):
     prog = st.progress(0); stat = st.empty(); found = []
     for i, t in enumerate(tickers):
         if i%5==0: prog.progress((i+1)/len(tickers)); stat.text(f"Analiza: {t}")
@@ -321,17 +361,17 @@ if st.button(f"🔍 SKANUJ {curr_market}", type="primary", use_container_width=T
     prog.empty(); stat.empty()
     
     if found:
-        st.success(f"Znaleziono {len(found)} sygnałów!")
+        st.success(f"Znaleziono: {len(found)}")
         for item in found:
             with st.expander(f"{item['ticker']} ({item['change']}%) - {item['price']}", expanded=True):
-                c1, c2 = st.columns([1, 2])
+                c1, c2 = st.columns([1,2])
                 with c1:
-                    st.write(f"**Sygnał:** {item['details']['info']}")
+                    st.write(f"**{item['details']['info']}**")
                     st.metric(item['details']['name'], item['details']['val'])
-                    if ".WA" in item['ticker']: link = f"https://www.biznesradar.pl/notowania/{item['ticker'].replace('.WA', '')}"; st.link_button("👉 BiznesRadar", link)
-                    else: link = f"https://finance.yahoo.com/quote/{item['ticker']}"; st.link_button("👉 Yahoo Finance", link)
+                    l = f"https://finance.yahoo.com/quote/{item['ticker']}"
+                    st.link_button("Yahoo Finance", l)
                 with c2:
                     ch = item['chart_data'].tail(60)
                     for k,v in item['extra_lines'].items(): ch[k]=v
                     st.line_chart(ch)
-    else: st.warning(f"Brak sygnałów na rynku {curr_market}.")
+    else: st.warning("Brak wyników.")
