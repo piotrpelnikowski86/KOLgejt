@@ -8,106 +8,113 @@ from datetime import datetime
 st.set_page_config(page_title="KOLgejt", page_icon="📈", layout="wide")
 warnings.simplefilter(action='ignore', category=FutureWarning)
 
-# --- CSS (STYLIZACJA JAK NA ZDJĘCIU) ---
+# --- CSS (CIEMNY STYL - DOPASOWANY) ---
 st.markdown("""
 <style>
 /* Kontener paska przewijania */
 .scroll-container {
+    display: flex;
     overflow-x: auto;
-    white-space: nowrap;
-    padding: 20px 0;
+    gap: 20px;
+    padding-bottom: 15px;
     scrollbar-width: thin;
+    scrollbar-color: #555 #1E1E1E;
 }
 
-/* Karta Earnings (Styl Webull) */
+/* Karta Ciemna */
 .webull-card {
-    display: inline-block;
-    background-color: #EAEAEA; /* Jasne tło jak na zdjęciu */
-    border-radius: 8px;
-    width: 380px;
-    margin-right: 20px;
-    vertical-align: top;
-    font-family: 'Arial', sans-serif;
-    box-shadow: 0 4px 6px rgba(0,0,0,0.3);
+    flex: 0 0 auto; /* Nie ściskać kart */
+    background-color: #262730; /* Tło Streamlit Dark */
+    border-radius: 12px;
+    width: 350px;
+    font-family: sans-serif;
+    border: 1px solid #41424C;
     overflow: hidden;
-    border: 1px solid #ccc;
+    box-shadow: 0 4px 10px rgba(0,0,0,0.5);
 }
 
-/* Nagłówek z nazwą firmy */
+/* Nagłówek karty */
 .card-header {
     text-align: center;
-    padding: 10px;
-    background-color: #f0f2f6;
-    color: #333;
+    padding: 12px;
+    background-color: #0E1117;
+    color: white;
+    font-size: 18px;
     font-weight: bold;
-    font-size: 16px;
-    border-bottom: 1px solid #ddd;
+    border-bottom: 1px solid #41424C;
+    letter-spacing: 1px;
 }
 
-/* Tabela wyników */
+/* Tabela */
 .webull-table {
     width: 100%;
     border-collapse: collapse;
-    font-size: 12px;
+    font-size: 13px;
     text-align: center;
+    color: #DDD;
 }
 
 .webull-table th {
-    background-color: #0099FF; /* Niebieski nagłówek */
-    color: white;
-    padding: 6px;
-    font-weight: 600;
+    background-color: #31333F;
+    color: #AAA;
+    padding: 8px;
+    font-weight: normal;
+    font-size: 11px;
+    text-transform: uppercase;
 }
 
 .webull-table td {
-    padding: 8px;
-    color: black;
-    border-bottom: 1px solid white;
+    padding: 10px 5px;
+    border-bottom: 1px solid #31333F;
 }
 
-/* Fioletowe wiersze */
-.row-purple {
-    background-color: #E0CEE0; 
+/* Wiersz parzysty (lekko jaśniejszy) */
+.row-alt {
+    background-color: #2C2D36;
 }
 
-/* Kolory Beat/Miss */
-.text-beat { color: #00AA00; font-weight: bold; }
-.text-miss { color: #FF0000; font-weight: bold; }
+/* Kolory */
+.text-green { color: #00FF00; font-weight: bold; }
+.text-red { color: #FF4B4B; font-weight: bold; }
 
-/* Sekcja Logo */
-.logo-section {
-    text-align: center;
-    padding: 15px;
-    background-color: #EAEAEA;
+/* Logo na środku */
+.logo-container {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    padding: 20px;
+    background-color: #262730;
 }
 .big-logo {
-    height: 50px;
+    height: 60px;
+    width: 60px;
     object-fit: contain;
+    border-radius: 10px;
+    background-color: white; /* Tło dla logo, żeby było widać na ciemnym */
+    padding: 5px;
 }
 
 /* Statystyki dolne */
 .bottom-stats {
-    padding: 10px;
-    font-size: 11px;
-    color: #333;
-    background-color: #EAEAEA;
-    line-height: 1.6;
-    text-align: left;
-    padding-left: 20px;
+    padding: 15px;
+    font-size: 12px;
+    background-color: #1E1E1E;
+    color: #CCC;
+    border-top: 1px solid #41424C;
 }
-.stat-up { color: #00AA00; font-weight: bold; }
-.stat-down { color: #FF0000; font-weight: bold; }
-
+.stat-row {
+    display: flex;
+    justify-content: space-between;
+    margin-bottom: 5px;
+}
 </style>
 """, unsafe_allow_html=True)
 
 # --- LISTY SPÓŁEK ---
-
 SP500_TOP = ["AAPL", "MSFT", "NVDA", "GOOGL", "AMZN", "META", "TSLA", "AMD", "NFLX", "JPM", "DIS", "V", "MA"]
 NASDAQ_TOP = ["AAPL", "MSFT", "NVDA", "AMZN", "GOOGL", "META", "TSLA", "AVGO", "COST", "PEP", "AMD", "INTC"]
 WIG20_FULL = ["PKN.WA", "PKO.WA", "PZU.WA", "PEO.WA", "DNP.WA", "KGH.WA", "LPP.WA", "ALE.WA", "CDR.WA"]
 
-# Domeny do logo
 DOMAINS = {
     "AAPL": "apple.com", "MSFT": "microsoft.com", "NVDA": "nvidia.com", "GOOGL": "google.com",
     "AMZN": "amazon.com", "META": "meta.com", "TSLA": "tesla.com", "AMD": "amd.com",
@@ -124,28 +131,35 @@ def format_large_num(num):
 
 @st.cache_data(ttl=3600*12)
 def get_earnings_card_data(ticker):
-    """Pobiera dane i formatuje pod kartę ze zdjęcia."""
     try:
         stock = yf.Ticker(ticker)
         info = stock.info
         
-        # Próba pobrania danych finansowych
         eps_act = info.get('trailingEps', 0)
-        # Symulacja oczekiwań (bo YF free rzadko to daje) - zakładamy małe odchylenie
-        eps_est = info.get('forwardEps', eps_act * 0.95) 
+        eps_est = info.get('forwardEps', eps_act * 0.95) # Symulacja estymacji
         
         rev_act = info.get('totalRevenue', 0)
-        rev_est = rev_act * 0.98 # Symulacja oczekiwań
+        rev_est = rev_act * 0.98
         
         # Obliczenia Beat/Miss
-        eps_diff = ((eps_act - eps_est) / eps_est) * 100 if eps_est else 0
-        rev_diff = ((rev_act - rev_est) / rev_est) * 100 if rev_est else 0
+        if eps_est and eps_est != 0:
+            eps_diff_pct = ((eps_act - eps_est) / abs(eps_est)) * 100
+        else:
+            eps_diff_pct = 0
+            
+        if rev_est and rev_est != 0:
+            rev_diff_pct = ((rev_act - rev_est) / rev_est) * 100
+        else:
+            rev_diff_pct = 0
         
-        eps_text = f"Beat by {abs(eps_diff):.0f}%" if eps_diff >= 0 else f"Miss by {abs(eps_diff):.0f}%"
-        eps_class = "text-beat" if eps_diff >= 0 else "text-miss"
+        # Tylko pozytywne do "Spółki Fundamentalnej" (lub neutralne)
+        # Jeśli chcesz pokazywać wszystkie, usuń ten warunek, ale prosiłeś o wskazanie na wzrosty
         
-        rev_text = f"Beat by {abs(rev_diff):.0f}%" if rev_diff >= 0 else f"Miss by {abs(rev_diff):.0f}%"
-        rev_class = "text-beat" if rev_diff >= 0 else "text-miss"
+        eps_class = "text-green" if eps_diff_pct >= 0 else "text-red"
+        eps_label = "Beat" if eps_diff_pct >= 0 else "Miss"
+        
+        rev_class = "text-green" if rev_diff_pct >= 0 else "text-red"
+        rev_label = "Beat" if rev_diff_pct >= 0 else "Miss"
         
         # Growth metrics
         rev_growth = info.get('revenueGrowth', 0) * 100
@@ -158,14 +172,16 @@ def get_earnings_card_data(ticker):
             "logo": logo,
             "eps_est": round(eps_est, 2),
             "eps_act": round(eps_act, 2),
-            "eps_res": eps_text,
+            "eps_txt": f"{eps_label} {abs(eps_diff_pct):.0f}%",
             "eps_class": eps_class,
             "rev_est": format_large_num(rev_est),
             "rev_act": format_large_num(rev_act),
-            "rev_res": rev_text,
+            "rev_txt": f"{rev_label} {abs(rev_diff_pct):.0f}%",
             "rev_class": rev_class,
             "growth_rev": round(rev_growth, 1),
-            "growth_eps": round(earn_growth, 1)
+            "growth_eps": round(earn_growth, 1),
+            "growth_rev_class": "text-green" if rev_growth > 0 else "text-red",
+            "growth_eps_class": "text-green" if earn_growth > 0 else "text-red"
         }
     except:
         return None
@@ -215,7 +231,6 @@ def analyze_stock(ticker, strategy, params):
         data = yf.download(ticker, period="1y", progress=False, timeout=2, auto_adjust=False)
         if len(data) < 50: return None
         close = data['Close']
-        
         res = None
         chart_lines = {}
         
@@ -225,7 +240,6 @@ def analyze_stock(ticker, strategy, params):
             if curr <= params['rsi_threshold']:
                 res = {"info": f"RSI: {round(curr, 1)}", "val": round(curr, 1), "name": "RSI"}
                 chart_lines = {'RSI': rsi}
-        
         elif strategy == "SMA":
             sma = close.rolling(window=params['sma_period']).mean()
             if close.iloc[-1] > sma.iloc[-1]:
@@ -234,12 +248,9 @@ def analyze_stock(ticker, strategy, params):
         
         if res:
             return {
-                "ticker": ticker, 
-                "price": round(close.iloc[-1], 2),
+                "ticker": ticker, "price": round(close.iloc[-1], 2),
                 "change": round(((close.iloc[-1]-close.iloc[-2])/close.iloc[-2])*100, 2),
-                "details": res, 
-                "chart_data": data[['Close']].copy(), 
-                "extra_lines": chart_lines
+                "details": res, "chart_data": data[['Close']].copy(), "extra_lines": chart_lines
             }
     except: return None
     return None
@@ -247,7 +258,7 @@ def analyze_stock(ticker, strategy, params):
 # --- INTERFEJS ---
 
 with st.sidebar:
-    st.header("KOLgejt 7.0")
+    st.header("KOLgejt 7.1")
     market_choice = st.radio("Giełda:", ["🇺🇸 S&P 500", "💻 Nasdaq 100", "🇵🇱 WIG20 (GPW)"])
     st.divider()
     strat = st.selectbox("Skaner:", ["RSI (Wyprzedanie)", "SMA (Trend)"])
@@ -265,7 +276,7 @@ if "WIG20" in market_choice: tickers=WIG20_FULL; market="WIG20"
 elif "Nasdaq" in market_choice: tickers=NASDAQ_TOP; market="Nasdaq 100"
 else: tickers=SP500_TOP; market="S&P 500"
 
-# --- 1. MARKET OVERVIEW ---
+# --- 1. PULPIT ---
 st.subheader(f"🔥 Pulpit: {market}")
 with st.spinner("Analiza rynku..."):
     leaders, gainers, losers = get_market_overview(tickers)
@@ -276,70 +287,73 @@ for i, l in enumerate(leaders):
 
 st.write("---")
 
-# SEKCJA WZROSTÓW I SPADKÓW (PIONOWO - JEDEN POD DRUGIM)
-
-# WZROSTY
 st.markdown("### 🟩 Top 5 Wzrostów (Miesiąc)")
 if gainers:
     gc = st.columns(5)
     for i, g in enumerate(gainers):
         with gc[i]: st.metric(g['ticker'].replace('.WA',''), f"{g['price']:.2f}", f"+{g['m_change']:.2f}%", delta_color="normal")
-else: st.write("Brak danych.")
 
-st.write("") # Odstęp
+st.write("") 
 
-# SPADKI
 st.markdown("### 🔻 Top 5 Spadków (Miesiąc)")
 if losers:
     lc = st.columns(5)
     for i, l in enumerate(losers):
         with lc[i]: st.metric(l['ticker'].replace('.WA',''), f"{l['price']:.2f}", f"{l['m_change']:.2f}%", delta_color="normal")
-else: st.write("Brak danych.")
 
 st.write("---")
 
-# --- 2. EARNINGS SLIDER (STYL WEBULL) ---
-st.subheader("📢 Raporty Finansowe (Styl Webull)")
+# --- 2. SPÓŁKA FUNDAMENTALNA (SLIDER) ---
+st.subheader("💎 Spółka Fundamentalna (Potencjał)")
 
 earnings_html = '<div class="scroll-container">'
-# Pobieramy dane dla pierwszych 10 spółek z listy
-with st.spinner("Generuję karty Earnings..."):
-    for t in tickers[:10]:
+# Pobieramy dane dla pierwszych 8 spółek z listy
+with st.spinner("Szukam perełek fundamentalnych..."):
+    for t in tickers[:8]:
         e = get_earnings_card_data(t)
         if e:
+            # Renderowanie karty tylko jeśli dane są pobrane
             card = f"""
             <div class="webull-card">
                 <div class="card-header">{e['ticker'].replace('.WA','')}</div>
                 <table class="webull-table">
                     <thead>
                         <tr>
-                            <th>Parameters</th>
-                            <th>Expected ($)</th>
-                            <th>Numbers ($)</th>
+                            <th>Wskaźnik</th>
+                            <th>Prognoza</th>
+                            <th>Wynik</th>
                             <th>Beat/Miss</th>
                         </tr>
                     </thead>
                     <tbody>
-                        <tr class="row-purple">
-                            <td><strong>EPS</strong></td>
+                        <tr>
+                            <td>EPS ($)</td>
                             <td>{e['eps_est']}</td>
                             <td>{e['eps_act']}</td>
-                            <td class="{e['eps_class']}">{e['eps_res']}</td>
+                            <td class="{e['eps_class']}">{e['eps_txt']}</td>
                         </tr>
-                        <tr class="row-purple">
-                            <td><strong>Revenue</strong></td>
+                        <tr class="row-alt">
+                            <td>Przychód</td>
                             <td>{e['rev_est']}</td>
                             <td>{e['rev_act']}</td>
-                            <td class="{e['rev_class']}">{e['rev_res']}</td>
+                            <td class="{e['rev_class']}">{e['rev_txt']}</td>
                         </tr>
                     </tbody>
                 </table>
-                <div class="logo-section">
+                
+                <div class="logo-container">
                     <img src="{e['logo']}" class="big-logo" onerror="this.style.display='none'">
                 </div>
+                
                 <div class="bottom-stats">
-                    <div>Revenue Growth: <span class="{'stat-up' if e['growth_rev']>0 else 'stat-down'}">{e['growth_rev']}% YoY</span></div>
-                    <div>EPS Growth: <span class="{'stat-up' if e['growth_eps']>0 else 'stat-down'}">{e['growth_eps']}% YoY</span></div>
+                    <div class="stat-row">
+                        <span>Przychody r/r:</span>
+                        <span class="{e['growth_rev_class']}">{e['rev_growth']}%</span>
+                    </div>
+                    <div class="stat-row">
+                        <span>Zysk (EPS) r/r:</span>
+                        <span class="{e['growth_eps_class']}">{e['growth_eps']}%</span>
+                    </div>
                 </div>
             </div>
             """
@@ -361,15 +375,15 @@ if st.button(f"🔍 SKANUJ {market}", type="primary", use_container_width=True):
     prog.empty(); stat.empty()
     
     if found:
-        st.success(f"Znaleziono: {len(found)}")
+        st.success(f"Znaleziono {len(found)} sygnałów!")
         for item in found:
             with st.expander(f"{item['ticker']} ({item['change']}%) - {item['price']}", expanded=True):
                 c1, c2 = st.columns([1,2])
                 with c1:
-                    st.write(f"**{item['details']['info']}**")
+                    st.write(f"**Sygnał:** {item['details']['info']}")
                     st.metric(item['details']['name'], item['details']['val'])
-                    l = f"https://finance.yahoo.com/quote/{item['ticker']}"
-                    st.link_button("Yahoo Finance", l)
+                    if ".WA" in item['ticker']: link = f"https://www.biznesradar.pl/notowania/{item['ticker'].replace('.WA', '')}"; st.link_button("👉 BiznesRadar", link)
+                    else: link = f"https://finance.yahoo.com/quote/{item['ticker']}"; st.link_button("👉 Yahoo Finance", link)
                 with c2:
                     ch = item['chart_data'].tail(60)
                     for k,v in item['extra_lines'].items(): ch[k]=v
