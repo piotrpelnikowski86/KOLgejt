@@ -10,7 +10,6 @@ warnings.simplefilter(action='ignore', category=FutureWarning)
 
 # --- LISTY SPÓŁEK (STABILNE) ---
 
-# USA - S&P 500 (Top 50)
 SP500_TOP = [
     "AAPL", "MSFT", "NVDA", "GOOGL", "AMZN", "META", "TSLA", "BRK-B", "LLY", "AVGO",
     "JPM", "V", "XOM", "UNH", "MA", "PG", "JNJ", "HD", "MRK", "COST",
@@ -19,7 +18,6 @@ SP500_TOP = [
     "INTU", "NKE", "IBM", "PM", "GE", "AMAT", "TXN", "NOW", "SPGI", "CAT"
 ]
 
-# USA - Nasdaq 100 (Top 50)
 NASDAQ_TOP = [
     "AAPL", "MSFT", "NVDA", "AMZN", "GOOGL", "META", "TSLA", "AVGO", "COST", "PEP",
     "AMD", "NFLX", "CSCO", "INTC", "TMUS", "CMCSA", "TXN", "AMAT", "QCOM", "HON",
@@ -28,14 +26,13 @@ NASDAQ_TOP = [
     "CSX", "PYPL", "MNST", "ORLY", "ASML", "NXPI", "CTAS", "WDAY", "FTNT", "KDP"
 ]
 
-# POLSKA - WIG20 (Pełna lista)
 WIG20_FULL = [
     "PKN.WA", "PKO.WA", "PZU.WA", "PEO.WA", "DNP.WA", "KGH.WA", "LPP.WA", "ALE.WA",
     "CDR.WA", "SPL.WA", "CPS.WA", "PGE.WA", "KRU.WA", "KTY.WA", "ACP.WA", "MBK.WA",
     "JSW.WA", "ALR.WA", "TPE.WA", "PCO.WA"
 ]
 
-# --- FUNKCJE POMOCNICZE ---
+# --- FUNKCJE MATEMATYCZNE ---
 
 def calc_rsi(series, period=14):
     delta = series.diff()
@@ -54,49 +51,50 @@ def calc_bollinger(series, period=20, std_dev=2):
     low = sma - (std * std_dev)
     return up, low
 
-# --- ANALIZA RYNKU (TOP 5 & SPADKI) ---
+# --- ANALIZA RYNKU (TOP 5, GAINERS, LOSERS) ---
 
 def get_market_overview(tickers):
-    """Pobiera dane dla Top 5 i oblicza spadki miesięczne dla całej listy."""
+    """Oblicza liderów rynku, wzrosty i spadki."""
     try:
-        # Pobieramy dane z ostatniego miesiąca dla CAŁEJ listy (dla efektywności)
-        # group_by='ticker' pozwala łatwiej operować na kolumnach
+        # Pobieramy dane z 1 miesiąca dla wszystkich spółek
         data = yf.download(tickers, period="1mo", progress=False, timeout=5, group_by='ticker', auto_adjust=False)
         
-        # 1. Top 5 (Ceny bieżące)
-        top5_data = []
-        # Bierzemy po prostu 5 pierwszych z listy (które są zazwyczaj największe)
+        # 1. Top 5 Liderów (Pierwsze 5 z listy - zazwyczaj największe kapitalizacją w moich listach)
+        leaders_data = []
         for t in tickers[:5]:
             try:
                 if len(data[t]) > 0:
                     curr = data[t]['Close'].iloc[-1]
-                    prev = data[t]['Close'].iloc[-2]
+                    prev = data[t]['Close'].iloc[-2] # Zmiana dzienna
                     chg = ((curr - prev) / prev) * 100
-                    top5_data.append({"ticker": t, "price": curr, "change": chg})
+                    leaders_data.append({"ticker": t, "price": curr, "change": chg})
             except: pass
 
-        # 2. Największe spadki (30 dni)
-        losers = []
+        # 2. Analiza Miesięczna (Wzrosty i Spadki)
+        all_changes = []
         for t in tickers:
             try:
-                # Obliczamy zmianę od początku miesiąca do teraz
-                if len(data[t]) > 10: # Musi być trochę danych
-                    start_price = data[t]['Close'].iloc[0]
-                    end_price = data[t]['Close'].iloc[-1]
+                if len(data[t]) > 10:
+                    start_price = data[t]['Close'].iloc[0] # Cena sprzed miesiąca
+                    end_price = data[t]['Close'].iloc[-1]  # Cena teraz
                     month_chg = ((end_price - start_price) / start_price) * 100
-                    
-                    if month_chg < 0: # Tylko spadkowe
-                        losers.append({"ticker": t, "month_change": month_chg, "price": end_price})
+                    all_changes.append({"ticker": t, "month_change": month_chg, "price": end_price})
             except: pass
         
-        # Sortujemy spadki (od największego minusa)
-        losers.sort(key=lambda x: x['month_change'])
+        # Sortowanie
+        # Największe spadki (rosnąco)
+        all_changes.sort(key=lambda x: x['month_change'])
+        losers = all_changes[:5] # Pierwsze 5 to największe minusy
         
-        return top5_data, losers[:5] # Zwracamy Top 5 i 5 największych spadkowiczów
+        # Największe wzrosty (malejąco)
+        all_changes.sort(key=lambda x: x['month_change'], reverse=True)
+        gainers = all_changes[:5] # Pierwsze 5 to największe plusy
+        
+        return leaders_data, gainers, losers
     except Exception as e:
-        return [], []
+        return [], [], []
 
-# --- ANALIZA TECHNICZNA (SKANER) ---
+# --- SKANER TECHNICZNY ---
 
 def analyze_stock(ticker, strategy, params):
     try:
@@ -107,7 +105,6 @@ def analyze_stock(ticker, strategy, params):
         result = None
         chart_lines = {}
 
-        # RSI
         if strategy == "RSI":
             rsi = calc_rsi(close, 14)
             thresh = params['rsi_threshold']
@@ -116,7 +113,6 @@ def analyze_stock(ticker, strategy, params):
                 result = {"info": f"RSI: {round(curr, 1)}", "val": round(curr, 1), "name": "RSI"}
                 chart_lines = {'RSI': rsi}
 
-        # SMA
         elif strategy == "SMA":
             per = params['sma_period']
             sma = calc_sma(close, per)
@@ -127,7 +123,6 @@ def analyze_stock(ticker, strategy, params):
                 result = {"info": f"+{round(diff, 1)}% nad SMA", "val": round(curr_sma, 2), "name": f"SMA {per}"}
                 chart_lines = {f'SMA_{per}': sma}
 
-        # BOLLINGER
         elif strategy == "Bollinger":
             up, low = calc_bollinger(close, 20, 2)
             curr = close.iloc[-1]
@@ -149,11 +144,10 @@ def analyze_stock(ticker, strategy, params):
         return None
     return None
 
-# --- INTERFEJS APLIKACJI ---
+# --- INTERFEJS ---
 
-# Pasek boczny
 with st.sidebar:
-    st.header("KOLgejt 5.0")
+    st.header("KOLgejt 5.1")
     
     st.subheader("1. Wybór Rynku")
     market_choice = st.radio("Giełda:", ["🇺🇸 S&P 500", "💻 Nasdaq 100", "🇵🇱 WIG20 (GPW)"])
@@ -182,93 +176,66 @@ with c2:
     if st.button("🔄 Odśwież dane"):
         st.rerun()
 
-# Dobór listy spółek
+# Ustalanie listy tickerów
 if "WIG20" in market_choice:
     tickers = WIG20_FULL
     curr_market = "WIG20"
 elif "Nasdaq" in market_choice:
-    tickers = NASDAQ_TOP50
+    tickers = NASDAQ_TOP
     curr_market = "Nasdaq 100"
 else:
     tickers = SP500_TOP
     curr_market = "S&P 500"
 
-# --- SEKCJA 1: PULPIT (Top 5 + Spadki) ---
+# --- SEKCJA 1: PULPIT RYNKU ---
 
-st.subheader(f"🔥 Pulpit Rynku: {curr_market}")
+st.subheader(f"🔥 Pulpit: {curr_market}")
 
-# Pobieramy dane do pulpitu (Top 5 i Losers)
-with st.spinner("Pobieram dane rynkowe..."):
-    top5, month_losers = get_market_overview(tickers)
+with st.spinner("Pobieram najnowsze dane..."):
+    leaders, gainers, losers = get_market_overview(tickers)
 
-# Wyświetlenie TOP 5
+# Liderzy (Top 5 indeksu)
 cols = st.columns(5)
-for i, item in enumerate(top5):
+for i, item in enumerate(leaders):
     with cols[i]:
-        color = "normal"
-        if item['change'] > 0: color = "off" # Streamlit auto-colors positive green
+        # Streamlit auto-colors: Positive = Green, Negative = Red
         st.metric(item['ticker'].replace('.WA', ''), f"{item['price']:.2f}", f"{item['change']:.2f}%")
 
 st.write("")
+st.write("")
 
-# Wyświetlenie SPADKOWICZÓW (Miesiąc)
-with st.expander("🔻 Największe spadki (Ostatnie 30 dni) - Zobacz listę", expanded=True):
-    if month_losers:
-        l_cols = st.columns(5)
-        for i, loser in enumerate(month_losers):
-            with l_cols[i]:
-                st.metric(
-                    loser['ticker'].replace('.WA', ''), 
-                    f"{loser['price']:.2f}", 
-                    f"{loser['month_change']:.2f}%",
-                    delta_color="inverse" # Czerwony kolor dla minusa
-                )
+# Wzrosty i Spadki (Miesiąc) - Dwie kolumny
+col_gain, col_loss = st.columns(2)
+
+with col_gain:
+    st.markdown("### 🟩 Top 5 Wzrostów (Miesiąc)")
+    if gainers:
+        for g in gainers:
+            st.metric(
+                g['ticker'].replace('.WA', ''), 
+                f"{g['price']:.2f}", 
+                f"+{g['month_change']:.2f}%", 
+            )
     else:
-        st.write("Brak danych lub wszystkie spółki rosną.")
+        st.write("Brak danych.")
+
+with col_loss:
+    st.markdown("### 🔻 Top 5 Spadków (Miesiąc)")
+    if losers:
+        for l in losers:
+            # delta_color='inverse' sprawia, że minus jest czerwony (domyślnie w streamlit minus też jest czerwony, ale to wymusza styl 'zły')
+            st.metric(
+                l['ticker'].replace('.WA', ''), 
+                f"{l['price']:.2f}", 
+                f"{l['month_change']:.2f}%",
+                delta_color="normal" 
+            )
+    else:
+        st.write("Brak danych.")
 
 st.divider()
 
 # --- SEKCJA 2: SKANER ---
 st.subheader(f"📡 Skaner Techniczny ({strat.split()[0]})")
 
-if st.button(f"🔍 SKANUJ {curr_market}", type="primary", use_container_width=True):
-    
-    progress = st.progress(0)
-    status = st.empty()
-    found = []
-    
-    for i, t in enumerate(tickers):
-        if i % 5 == 0: 
-            progress.progress((i+1)/len(tickers))
-            status.text(f"Analiza: {t}")
-        
-        res = analyze_stock(t, strat.split()[0], params)
-        if res: found.append(res)
-    
-    progress.empty()
-    status.empty()
-    
-    if found:
-        st.success(f"Znaleziono {len(found)} sygnałów!")
-        for item in found:
-            with st.expander(f"{item['ticker']} ({item['change']}%) - {item['price']}", expanded=True):
-                c1, c2 = st.columns([1, 2])
-                with c1:
-                    st.write(f"**Sygnał:** {item['details']['info']}")
-                    st.metric(item['details']['name'], item['details']['val'])
-                    
-                    # Linkowanie: Yahoo dla USA, Bankier/BiznesRadar dla PL (opcjonalnie)
-                    if ".WA" in item['ticker']:
-                        link = f"https://www.biznesradar.pl/notowania/{item['ticker'].replace('.WA', '')}"
-                        st.link_button("👉 BiznesRadar (PL)", link)
-                    else:
-                        link = f"https://finance.yahoo.com/quote/{item['ticker']}"
-                        st.link_button("👉 Yahoo Finance", link)
-
-                with c2:
-                    chart = item['chart_data'].tail(60)
-                    for k, v in item['extra_lines'].items():
-                        chart[k] = v
-                    st.line_chart(chart)
-    else:
-        st.warning(f"Brak sygnałów na rynku {curr_market}. Spróbuj zmienić strategię.")
+if st.button(f"🔍 SKANUJ {curr
