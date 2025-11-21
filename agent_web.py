@@ -12,7 +12,7 @@ from datetime import datetime
 st.set_page_config(page_title="KOLgejt", page_icon="🐊", layout="wide")
 warnings.simplefilter(action='ignore', category=FutureWarning)
 
-# --- CSS (ZAAWANSOWANE POZYCJONOWANIE) ---
+# --- CSS (STYL I POZYCJONOWANIE) ---
 st.markdown("""
 <style>
 /* Kontener slidera */
@@ -41,11 +41,11 @@ st.markdown("""
     border-radius: 12px;
 }
 
-/* Krokodyl - Pozycjonowanie */
+/* Krokodyl - Pozycjonowanie (Lewy Dolny Róg) */
 .croc-absolute {
     position: absolute;
     bottom: -20px; 
-    left: -90px;   
+    left: -100px;   
     width: 160px;  
     height: auto;
     z-index: 3; 
@@ -95,7 +95,7 @@ def format_large_num(num):
     if num > 1e6: return f"{num/1e6:.2f}M"
     return f"{num:.2f}"
 
-# --- FUNKCJA DO KODOWANIA OBRAZKA (BASE64) ---
+# --- FUNKCJA DO KODOWANIA OBRAZKA NA BASE64 ---
 def get_img_as_base64(file_path):
     try:
         with open(file_path, "rb") as f:
@@ -253,39 +253,33 @@ def get_link(ticker):
     if ".WA" in ticker: return f"https://www.biznesradar.pl/notowania/{ticker.replace('.WA', '')}"
     return f"https://finance.yahoo.com/quote/{ticker}"
 
-# --- RENDEROWANIE KROKODYLA Z BASE64 (GWARANCJA WYŚWIETLENIA) ---
+# --- RENDEROWANIE KROKODYLA Z JPG ---
 def render_strong_buy_section(best_pick):
     if not best_pick:
         st.info("Brak 'Strong Buy' w tej grupie.")
         return
 
-    # Próba wczytania lokalnego pliku i konwersji na kod
+    # Szukanie pliku krokodyl_poleca.jpg
     img_b64 = None
-    local_files = ["krokodyl_poleca.png.png", "krokodyl_poleca.png", "krokodyl.png"]
+    if os.path.exists("krokodyl_poleca.jpg"):
+        img_b64 = get_img_as_base64("krokodyl_poleca.jpg")
     
-    for f in local_files:
-        if os.path.exists(f):
-            img_b64 = get_img_as_base64(f)
-            break
-            
     if img_b64:
-        # Jeśli mamy plik, używamy kodu Base64
-        img_src = f"data:image/png;base64,{img_b64}"
+        croc_src = f"data:image/jpeg;base64,{img_b64}"
     else:
-        # Jeśli nie, używamy linku zapasowego
-        img_src = "https://cdn-icons-png.flaticon.com/512/2328/2328979.png"
+        # Zapas, jeśli plik jednak nie został wgrany
+        croc_src = "https://cdn-icons-png.flaticon.com/512/2328/2328979.png"
 
     e = best_pick
     logo_div = f'<div class="logo-container"><img src="{e["logo"]}" class="big-logo"></div>' if e['logo'] else '<div class="logo-container" style="height:60px;"></div>'
     
-    # HTML Z WBUDOWANYM OBRAZKIEM
-    html_code = f"""<div class="strong-buy-wrapper"><img src="{img_src}" class="croc-absolute"><div class="webull-card strong-buy-card-style"><div class="badge">STRONG BUY</div><div class="card-header"><a href="{e["link"]}" target="_blank">{e["ticker"].replace(".WA","")} 🔗</a></div><table class="webull-table"><thead><tr><th>Cel Cenowy</th><th>Potencjał</th><th>Wzrost EPS</th></tr></thead><tbody><tr><td>{e["target_price"]}</td><td class="text-green">+{e["upside"]:.1f}%</td><td class="{e["g_eps_cls"]}">{e["earn_growth"]}%</td></tr></tbody></table>{logo_div}<div class="bottom-stats" style="text-align:center;">Rekomendacja: <strong>STRONG BUY</strong><br>EPS Est: {e["eps_est"]}</div></div></div>"""
+    html_code = f"""<div class="strong-buy-wrapper"><img src="{croc_src}" class="croc-absolute"><div class="webull-card strong-buy-card-style"><div class="badge">STRONG BUY</div><div class="card-header"><a href="{e["link"]}" target="_blank">{e["ticker"].replace(".WA","")} 🔗</a></div><table class="webull-table"><thead><tr><th>Cel Cenowy</th><th>Potencjał</th><th>Wzrost EPS</th></tr></thead><tbody><tr><td>{e["target_price"]}</td><td class="text-green">+{e["upside"]:.1f}%</td><td class="{e["g_eps_cls"]}">{e["earn_growth"]}%</td></tr></tbody></table>{logo_div}<div class="bottom-stats" style="text-align:center;">Rekomendacja: <strong>STRONG BUY</strong><br>EPS Est: {e["eps_est"]}</div></div></div>"""
     
     st.markdown(html_code, unsafe_allow_html=True)
 
 # --- UI ---
 with st.sidebar:
-    st.header("KOLgejt 23.0")
+    st.header("KOLgejt 25.0")
     market_choice = st.radio("Giełda:", ["🇺🇸 S&P 500", "💻 Nasdaq 100", "🇵🇱 GPW (WIG20 + mWIG40)"])
     st.divider()
     
