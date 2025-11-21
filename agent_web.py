@@ -10,18 +10,21 @@ from datetime import datetime
 st.set_page_config(page_title="KOLgejt", page_icon="📈", layout="wide")
 warnings.simplefilter(action='ignore', category=FutureWarning)
 
-# --- CSS (STYL WEBULL DARK + LINKI) ---
+# --- CSS (STYL WEBULL DARK + MINI KARTY) ---
 st.markdown("""
 <style>
+/* Kontener paska przewijania */
 .scroll-container {
     display: flex;
     overflow-x: auto;
-    gap: 20px;
+    gap: 15px;
     padding: 10px 5px;
     width: 100%;
     scrollbar-width: thin;
     scrollbar-color: #555 #1E1E1E;
 }
+
+/* Duża Karta (Fundamentalna) */
 .webull-card {
     flex: 0 0 auto;
     background-color: #262730;
@@ -33,55 +36,52 @@ st.markdown("""
     box-shadow: 0 4px 10px rgba(0,0,0,0.5);
     position: relative;
 }
-/* Wyróżnienie dla Strong Buy */
-.strong-buy-card {
-    border: 2px solid #FFD700; /* Złota ramka */
-    box-shadow: 0 0 15px rgba(255, 215, 0, 0.3);
-}
-.badge {
-    position: absolute;
-    top: 10px;
-    right: 10px;
-    background-color: #FFD700;
-    color: black;
-    font-size: 10px;
-    font-weight: bold;
-    padding: 2px 6px;
-    border-radius: 4px;
-    z-index: 10;
-}
-.card-header {
+
+/* Mini Karta (Wzrosty/Spadki) */
+.mini-card {
+    flex: 0 0 auto;
+    background-color: #1E1E1E;
+    border-radius: 8px;
+    width: 160px;
+    padding: 10px;
     text-align: center;
-    padding: 12px;
-    background-color: #0E1117;
-    border-bottom: 1px solid #41424C;
+    border: 1px solid #333;
+    box-shadow: 0 2px 5px rgba(0,0,0,0.3);
 }
-.card-header a {color: white; font-size: 18px; font-weight: bold; text-decoration: none;}
-.webull-table {width: 100%; border-collapse: collapse; font-size: 12px; text-align: center; color: #DDD;}
-.webull-table th {background-color: #31333F; color: #AAA; padding: 6px; font-weight: normal;}
-.webull-table td {padding: 8px 4px; border-bottom: 1px solid #31333F;}
+.mini-card-up { border-top: 3px solid #00FF00; }
+.mini-card-down { border-top: 3px solid #FF4B4B; }
+
+.mini-ticker { font-size: 16px; font-weight: bold; color: white; margin-bottom: 5px; }
+.mini-price { font-size: 14px; color: #CCC; }
+.mini-change { font-size: 14px; font-weight: bold; margin-top: 2px; }
+
+/* Strong Buy Badge */
+.strong-buy-card { border: 2px solid #FFD700; box-shadow: 0 0 15px rgba(255, 215, 0, 0.3); }
+.badge { position: absolute; top: 10px; right: 10px; background-color: #FFD700; color: black; font-size: 10px; font-weight: bold; padding: 2px 6px; border-radius: 4px; z-index: 10; }
+
+.card-header { text-align: center; padding: 12px; background-color: #0E1117; border-bottom: 1px solid #41424C; }
+.card-header a { color: white; font-size: 18px; font-weight: bold; text-decoration: none; }
+.webull-table { width: 100%; border-collapse: collapse; font-size: 12px; text-align: center; color: #DDD; }
+.webull-table th { background-color: #31333F; color: #AAA; padding: 6px; font-weight: normal; }
+.webull-table td { padding: 8px 4px; border-bottom: 1px solid #31333F; }
 .row-alt { background-color: #2C2D36; }
 .text-green { color: #00FF00; font-weight: bold; }
 .text-red { color: #FF4B4B; font-weight: bold; }
-.logo-container {
-    display: flex;
-    justify-content: center;
-    align-items: center;
-    padding: 15px;
-    background-color: #262730;
-    min-height: 70px;
-}
-.big-logo {height: 50px; width: 50px; object-fit: contain; border-radius: 8px; background-color: white; padding: 4px;}
-.bottom-stats {padding: 10px; font-size: 11px; background-color: #1E1E1E; color: #CCC; border-top: 1px solid #41424C;}
-.stat-row {display: flex; justify-content: space-between; margin-bottom: 4px;}
+.logo-container { display: flex; justify-content: center; align-items: center; padding: 15px; background-color: #262730; min-height: 70px; }
+.big-logo { height: 50px; width: 50px; object-fit: contain; border-radius: 8px; background-color: white; padding: 4px; }
+.bottom-stats { padding: 10px; font-size: 11px; background-color: #1E1E1E; color: #CCC; border-top: 1px solid #41424C; }
+.stat-row { display: flex; justify-content: space-between; margin-bottom: 4px; }
 </style>
 """, unsafe_allow_html=True)
 
-# --- DANE ---
-# Używamy szerszych list, żeby mieć z czego wybierać Top 5
-SP500_POOL = ["NVDA", "META", "AMD", "AMZN", "MSFT", "GOOGL", "AAPL", "TSLA", "NFLX", "AVGO", "LLY", "JPM", "V", "MA", "COST", "PEP", "KO", "XOM", "CVX", "BRK-B", "DIS", "WMT", "HD", "PG", "MRK", "ABBV", "CRM", "ACN", "LIN", "ADBE"]
-NASDAQ_POOL = ["NVDA", "META", "AMD", "AMZN", "MSFT", "GOOGL", "AAPL", "TSLA", "NFLX", "AVGO", "COST", "PEP", "INTC", "CSCO", "TMUS", "CMCSA", "AMGN", "TXN", "QCOM", "HON", "INTU", "BKNG", "ISRG", "SBUX", "MDLZ", "GILD", "ADP", "LRCX"]
-WIG20_POOL = ["PKN.WA", "PKO.WA", "PZU.WA", "PEO.WA", "DNP.WA", "KGH.WA", "LPP.WA", "ALE.WA", "CDR.WA", "SPL.WA", "CPS.WA", "PGE.WA", "KRU.WA", "KTY.WA", "ACP.WA", "MBK.WA", "JSW.WA", "ALR.WA", "TPE.WA"]
+# --- LISTY (MAŁE DO FUNDAMENTÓW, FUNKCJE DO DUŻYCH) ---
+# To są listy do "szybkiego podglądu" (Fundamenty)
+POOL_SP500 = ["NVDA", "META", "AMD", "AMZN", "MSFT", "GOOGL", "AAPL", "TSLA", "NFLX", "AVGO", "LLY", "JPM", "V", "MA", "COST", "PEP", "KO", "XOM", "CVX", "BRK-B", "DIS", "WMT", "HD", "PG", "MRK", "ABBV", "CRM", "ACN", "LIN", "ADBE"]
+POOL_NASDAQ = ["NVDA", "META", "AMD", "AMZN", "MSFT", "GOOGL", "AAPL", "TSLA", "NFLX", "AVGO", "COST", "PEP", "INTC", "CSCO", "TMUS", "CMCSA", "AMGN", "TXN", "QCOM", "HON", "INTU", "BKNG", "ISRG", "SBUX", "MDLZ", "GILD", "ADP", "LRCX"]
+POOL_WIG20 = ["PKN.WA", "PKO.WA", "PZU.WA", "PEO.WA", "DNP.WA", "KGH.WA", "LPP.WA", "ALE.WA", "CDR.WA", "SPL.WA", "CPS.WA", "PGE.WA", "KRU.WA", "KTY.WA", "ACP.WA", "MBK.WA", "JSW.WA", "ALR.WA", "TPE.WA"]
+
+# Duża lista zapasowa dla Skanera (gdyby Wikipedia padła)
+BACKUP_SP500_LARGE = ["AAPL", "MSFT", "NVDA", "GOOGL", "AMZN", "META", "TSLA", "BRK-B", "LLY", "AVGO", "JPM", "V", "XOM", "UNH", "MA", "PG", "JNJ", "HD", "MRK", "COST", "ABBV", "CVX", "CRM", "BAC", "WMT", "AMD", "ACN", "PEP", "KO", "LIN", "TMO", "DIS", "MCD", "CSCO", "ABT", "INTC", "WFC", "VZ", "NFLX", "QCOM", "INTU", "NKE", "IBM", "PM", "GE", "AMAT", "TXN", "NOW", "SPGI", "CAT", "BA", "RTX", "HON", "UNP", "GS", "AMGN", "IBM", "DE", "LMT", "EL", "PLD", "BLK", "SYK", "ISRG", "BKNG", "MDLZ", "GILD", "ADP", "LRCX", "TJX", "MMC", "VRTX", "REGN", "ADI", "ZTS", "C", "CI", "BSX", "FI", "CB", "SCHW", "MO", "SO", "TMUS", "EOG", "PGR", "BDX", "PANW", "WM", "TGT", "CL", "ITW", "SHW", "CSX", "SLB", "HUM", "MMM", "USB", "PNC", "DUK", "EMR", "APH", "MCO", "FCX", "TFC", "NEM", "FDX", "NSC", "GD", "NXPI", "ORLY", "MCK", "PSX", "MAR", "MPC", "ROP", "ADSK", "KLAC", "MSI", "ECL", "CTAS", "DLR", "AIG", "APH", "COF", "AFL", "O", "TEL", "TRV", "ALL", "BK", "YUM", "ROST", "AEP", "MET", "KMB", "JCI", "D", "PEG", "FAST", "PRU", "WELL", "ED", "WMB", "CMI", "EXC", "HPQ", "PAYX", "GLW", "KR", "PCAR", "DHI", "XEL", "VLO", "CTSH", "SRE", "PEG", "WEC", "AWK", "ES", "ODFL", "HIG", "PPG", "VICI", "EIX", "OXY", "KMI", "ON", "SBAC", "HAL", "DVN", "HESS", "FANG", "BKR", "MRO", "APA", "CTRA"]
 
 DOMAINS = {
     "AAPL": "apple.com", "MSFT": "microsoft.com", "NVDA": "nvidia.com", "GOOGL": "google.com",
@@ -99,40 +99,57 @@ def format_large_num(num):
     if num > 1e6: return f"{num/1e6:.2f}M"
     return f"{num:.2f}"
 
-# --- LOGIKA FUNDAMENTALNA (SORTOWANIE I STRONG BUY) ---
+# --- FUNKCJE POBIERANIA LIST (FULL SCAN) ---
+@st.cache_data(ttl=3600)
+def get_full_market_tickers(market):
+    headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"}
+    
+    if market == "WIG20":
+        return POOL_WIG20 # Dla WIG20 lista jest stała
+    
+    if market == "Nasdaq 100":
+        try:
+            url = 'https://en.wikipedia.org/wiki/Nasdaq-100'
+            tables = pd.read_html(requests.get(url, headers=headers).text)
+            for t in tables:
+                if 'Ticker' in t.columns:
+                    return [str(x).replace('.', '-') for x in t['Ticker'].tolist()]
+            return POOL_NASDAQ
+        except: return POOL_NASDAQ
 
+    if market == "S&P 500":
+        try:
+            url = 'https://en.wikipedia.org/wiki/List_of_S%26P_500_companies'
+            tables = pd.read_html(requests.get(url, headers=headers).text)
+            return [str(x).replace('.', '-') for x in tables[0]['Symbol'].tolist()]
+        except:
+            # Jeśli Wikipedia padnie, używamy dużej listy backup (100+ spółek)
+            return BACKUP_SP500_LARGE
+    
+    return []
+
+# --- FUNDAMENTY ---
 @st.cache_data(ttl=3600*4)
 def scan_fundamentals(tickers_list):
-    """Skanuje listę i zwraca: 1. Top 5 Fundamentalnych, 2. Top 1 Strong Buy"""
     fundamental_data = []
     strong_buys = []
-    
     for t in tickers_list:
         try:
             stock = yf.Ticker(t)
             info = stock.info
-            
-            # Dane podstawowe
             rev_growth = info.get('revenueGrowth', 0)
             earn_growth = info.get('earningsGrowth', 0)
-            
-            # Jeśli brak danych, pomijamy w rankingu fundamentalnym
             if rev_growth is None or earn_growth is None: continue
             
-            # Obliczenie "Score" (siły spółki)
             score = (rev_growth * 100) + (earn_growth * 100)
-            
-            # Dane do karty
             eps_act = info.get('trailingEps', 0)
             eps_est = info.get('forwardEps', eps_act * 0.95)
             rev_act = info.get('totalRevenue', 0)
             rev_est = rev_act * 0.98
             
-            # Beat calculation
             eps_diff_pct = ((eps_act - eps_est) / abs(eps_est)) * 100 if eps_est else 0
             rev_diff_pct = ((rev_act - rev_est) / rev_est) * 100 if rev_est else 0
             
-            # Logo
             domain = DOMAINS.get(t)
             logo = f"https://logo.clearbit.com/{domain}" if domain else None
             link = f"https://finance.yahoo.com/quote/{t}"
@@ -145,35 +162,25 @@ def scan_fundamentals(tickers_list):
                 "rev_est": format_large_num(rev_est), "rev_act": format_large_num(rev_act),
                 "rev_txt": f"{'Beat' if rev_diff_pct>=0 else 'Miss'} {abs(rev_diff_pct):.0f}%",
                 "rev_cls": "text-green" if rev_diff_pct>=0 else "text-red",
-                "rev_growth": round(rev_growth*100, 1),
-                "earn_growth": round(earn_growth*100, 1),
+                "rev_growth": round(rev_growth*100, 1), "earn_growth": round(earn_growth*100, 1),
                 "g_rev_cls": "text-green" if rev_growth>0 else "text-red",
                 "g_eps_cls": "text-green" if earn_growth>0 else "text-red",
-                # Dla Strong Buy
                 "recommendation": info.get('recommendationKey', 'none'),
                 "target_price": info.get('targetMeanPrice', 0),
                 "current_price": info.get('currentPrice', info.get('previousClose', 0))
             }
-            
             fundamental_data.append(data_pack)
             
-            # Sprawdzenie czy to Strong Buy
             if data_pack['recommendation'] == 'strong_buy' and data_pack['target_price'] > data_pack['current_price']:
                 upside = ((data_pack['target_price'] - data_pack['current_price']) / data_pack['current_price']) * 100
                 data_pack['upside'] = upside
                 strong_buys.append(data_pack)
-                
         except: continue
 
-    # Sortowanie Top 5 (wg Score)
     fundamental_data.sort(key=lambda x: x['score'], reverse=True)
-    top5 = fundamental_data[:5]
-    
-    # Sortowanie Strong Buy (wg Upside potential)
     strong_buys.sort(key=lambda x: x.get('upside', 0), reverse=True)
-    best_pick = strong_buys[0] if strong_buys else None
     
-    return top5, best_pick
+    return fundamental_data[:5], (strong_buys[0] if strong_buys else None)
 
 # --- ANALIZA TECHNICZNA ---
 def analyze_stock_tech(ticker, strategy, params):
@@ -209,27 +216,25 @@ def analyze_stock_tech(ticker, strategy, params):
 # --- PULPIT DANE ---
 def get_market_overview(tickers):
     try:
-        # Bierzemy max 15 do podglądu
-        preview = tickers[:15]
+        # Pobieramy próbkę 30 spółek dla dashboardu (żeby było szybciej niż 500)
+        preview = tickers[:30] if len(tickers) > 30 else tickers
         data = yf.download(preview, period="1mo", progress=False, timeout=5, group_by='ticker', auto_adjust=False)
-        leaders, changes = [], []
+        changes = []
         for t in preview:
             try:
                 if len(data[t]) > 10:
                     c, p = data[t]['Close'].iloc[-1], data[t]['Close'].iloc[-2]
                     s = data[t]['Close'].iloc[0]
-                    day_chg = ((c-p)/p)*100
                     mon_chg = ((c-s)/s)*100
-                    if t in preview[:5]: leaders.append({"t": t, "p": c, "c": day_chg})
                     changes.append({"t": t, "mc": mon_chg, "p": c})
             except: pass
         changes.sort(key=lambda x: x['mc'])
-        return leaders, sorted(changes, key=lambda x: x['mc'], reverse=True)[:5], changes[:5]
-    except: return [], [], []
+        return sorted(changes, key=lambda x: x['mc'], reverse=True)[:5], changes[:5]
+    except: return [], []
 
 # --- UI ---
 with st.sidebar:
-    st.header("KOLgejt 9.0")
+    st.header("KOLgejt 10.0")
     market_choice = st.radio("Giełda:", ["🇺🇸 S&P 500", "💻 Nasdaq 100", "🇵🇱 WIG20 (GPW)"])
     st.divider()
     strat = st.selectbox("Skaner:", ["RSI (Wyprzedanie)", "SMA (Trend)"])
@@ -244,101 +249,93 @@ with c2:
     if st.button("🔄 Odśwież"): st.rerun()
 
 if "WIG20" in market_choice: 
-    market="WIG20"; tickers=WIG20_POOL
+    market="WIG20"; tickers_scan=get_full_market_tickers("WIG20"); tickers_fund=POOL_WIG20
 elif "Nasdaq" in market_choice: 
-    market="Nasdaq 100"; tickers=NASDAQ_POOL
+    market="Nasdaq 100"; tickers_scan=get_full_market_tickers("Nasdaq 100"); tickers_fund=POOL_NASDAQ
 else: 
-    market="S&P 500"; tickers=SP500_POOL
+    market="S&P 500"; tickers_scan=get_full_market_tickers("S&P 500"); tickers_fund=POOL_SP500
 
-# 1. PULPIT
-st.subheader(f"🔥 Pulpit: {market}")
-with st.spinner("Analiza liderów..."):
-    leaders, gainers, losers = get_market_overview(tickers)
+# 1. PULPIT - WZROSTY / SPADKI NA SLIDERZE
+st.subheader(f"🔥 Przepływ Rynku: {market}")
+with st.spinner("Analiza trendów..."):
+    gainers, losers = get_market_overview(tickers_scan) # Używamy listy skanera
 
-cols = st.columns(5)
-for i, l in enumerate(leaders):
-    with cols[i]: st.metric(l['t'].replace('.WA',''), f"{l['p']:.2f}", f"{l['c']:.2f}%")
+# Slider WZROSTY
+st.write("**🚀 Top Wzrosty (Miesiąc)**")
+if gainers:
+    gainers_html = '<div class="scroll-container">'
+    for g in gainers:
+        card = f"""
+        <div class="mini-card mini-card-up">
+            <div class="mini-ticker">{g['t'].replace('.WA','')}</div>
+            <div class="mini-price">{g['p']:.2f}</div>
+            <div class="mini-change text-green">+{g['mc']:.2f}%</div>
+        </div>
+        """
+        gainers_html += card
+    gainers_html += "</div>"
+    st.markdown(gainers_html, unsafe_allow_html=True)
+else: st.write("Brak danych.")
 
-st.write("---")
-col_g, col_l = st.columns(2)
-with col_g:
-    st.markdown("### 🟩 Top Wzrosty (Miesiąc)")
-    gc = st.columns(5)
-    if gainers:
-        for i, g in enumerate(gainers):
-            with gc[i]: st.metric(g['t'].replace('.WA',''), f"{g['p']:.2f}", f"+{g['mc']:.2f}%", delta_color="normal")
-with col_l:
-    st.markdown("### 🔻 Top Spadki (Miesiąc)")
-    lc = st.columns(5)
-    if losers:
-        for i, l in enumerate(losers):
-            with lc[i]: st.metric(l['t'].replace('.WA',''), f"{l['p']:.2f}", f"{l['mc']:.2f}%", delta_color="normal")
+st.write("")
 
-st.write("---")
+# Slider SPADKI
+st.write("**🔻 Top Spadki (Miesiąc)**")
+if losers:
+    losers_html = '<div class="scroll-container">'
+    for l in losers:
+        card = f"""
+        <div class="mini-card mini-card-down">
+            <div class="mini-ticker">{l['t'].replace('.WA','')}</div>
+            <div class="mini-price">{l['p']:.2f}</div>
+            <div class="mini-change text-red">{l['mc']:.2f}%</div>
+        </div>
+        """
+        losers_html += card
+    losers_html += "</div>"
+    st.markdown(losers_html, unsafe_allow_html=True)
+else: st.write("Brak danych.")
 
-# POBIERANIE DANYCH FUNDAMENTALNYCH (JEDEN RAZ)
-with st.spinner("Skanuję fundamenty i szukam perełek (to może chwilę potrwać)..."):
-    top_funds, best_pick = scan_fundamentals(tickers)
+st.divider()
 
-# 2. ANALYST STRONG BUY (NOWA SEKCJA)
-st.subheader("🏆 Analyst Strong Buy (Wybór Ekspertów)")
+# 2. FUNDAMENTY (Pula Smart)
+with st.spinner("Szukam perełek fundamentalnych (Smart Pool)..."):
+    top_funds, best_pick = scan_fundamentals(tickers_fund)
+
+st.subheader("🏆 Analyst Strong Buy")
 if best_pick:
     e = best_pick
     logo_html = f'<div class="logo-container"><img src="{e["logo"]}" class="big-logo"></div>' if e['logo'] else '<div class="logo-container" style="height:60px;"></div>'
-    
-    # Wyświetlamy jedną dużą kartę
-    st.markdown(f"""
-    <div class="webull-card strong-buy-card" style="margin: 0 auto; display: block;">
-        <div class="badge">STRONG BUY</div>
-        <div class="card-header"><a href="{e['link']}" target="_blank">{e['ticker'].replace('.WA','')} 🔗</a></div>
-        <table class="webull-table">
-            <thead><tr><th>Cel Cenowy</th><th>Potencjał</th><th>Wzrost EPS</th></tr></thead>
-            <tbody>
-                <tr>
-                    <td>{e['target_price']} $</td>
-                    <td class="text-green">+{e['upside']:.1f}%</td>
-                    <td class="{e['g_eps_cls']}">{e['earn_growth']}%</td>
-                </tr>
-            </tbody>
-        </table>
-        {logo_html}
-        <div class="bottom-stats" style="text-align:center;">
-            Rekomendacja analityków: <strong>STRONG BUY</strong><br>
-            Przewidywany zysk na akcji: {e['eps_est']} $
-        </div>
-    </div>
-    """, unsafe_allow_html=True)
-else:
-    st.info("Brak spółek z oceną 'Strong Buy' i potencjałem wzrostu w tym indeksie.")
+    st.markdown(f"""<div class="webull-card strong-buy-card" style="margin: 0 auto; display: block;"><div class="badge">STRONG BUY</div><div class="card-header"><a href="{e['link']}" target="_blank">{e['ticker'].replace('.WA','')} 🔗</a></div><table class="webull-table"><thead><tr><th>Cel Cenowy</th><th>Potencjał</th><th>Wzrost EPS</th></tr></thead><tbody><tr><td>{e['target_price']}</td><td class="text-green">+{e['upside']:.1f}%</td><td class="{e['g_eps_cls']}">{e['earn_growth']}%</td></tr></tbody></table>{logo_html}<div class="bottom-stats" style="text-align:center;">Rekomendacja: <strong>STRONG BUY</strong><br>EPS Est: {e['eps_est']}</div></div>""", unsafe_allow_html=True)
+else: st.info("Brak 'Strong Buy' w tej grupie.")
 
 st.write("---")
-
-# 3. TOP 5 FUNDAMENTALNE (POSORTOWANE)
-st.subheader("💎 Top 5 Fundamentalnych (Największy Wzrost)")
+st.subheader("💎 Top 5 Fundamentalnych (Slider)")
 if top_funds:
-    earnings_html = '<div class="scroll-container">'
+    fund_html = '<div class="scroll-container">'
     for e in top_funds:
         logo_html = f'<div class="logo-container"><img src="{e["logo"]}" class="big-logo"></div>' if e['logo'] else '<div class="logo-container" style="height:60px;"></div>'
-        card = f"""<div class="webull-card"><div class="card-header"><a href="{e['link']}" target="_blank">{e['ticker'].replace('.WA','')} 🔗</a></div><table class="webull-table"><thead><tr><th>Wskaźnik</th><th>Prognoza</th><th>Wynik</th><th>Beat/Miss</th></tr></thead><tbody><tr><td>EPS ($)</td><td>{e['eps_est']}</td><td>{e['eps_act']}</td><td class="{e['eps_cls']}">{e['eps_txt']}</td></tr><tr class="row-alt"><td>Przychód</td><td>{e['rev_est']}</td><td>{e['rev_act']}</td><td class="{e['rev_cls']}">{e['rev_txt']}</td></tr></tbody></table>{logo_html}<div class="bottom-stats"><div class="stat-row"><span>Przychody r/r:</span><span class="{e['g_rev_cls']}">{e['rev_growth']}%</span></div><div class="stat-row"><span>Zysk (EPS) r/r:</span><span class="{e['g_eps_cls']}">{e['earn_growth']}%</span></div></div></div>"""
-        earnings_html += card
-    earnings_html += "</div>"
-    st.markdown(earnings_html, unsafe_allow_html=True)
-else:
-    st.write("Brak danych fundamentalnych.")
+        card = f"""<div class="webull-card"><div class="card-header"><a href="{e['link']}" target="_blank">{e['ticker'].replace('.WA','')} 🔗</a></div><table class="webull-table"><thead><tr><th>Wskaźnik</th><th>Prognoza</th><th>Wynik</th><th>Beat/Miss</th></tr></thead><tbody><tr><td>EPS</td><td>{e['eps_est']}</td><td>{e['eps_act']}</td><td class="{e['eps_cls']}">{e['eps_txt']}</td></tr><tr class="row-alt"><td>Przychód</td><td>{e['rev_est']}</td><td>{e['rev_act']}</td><td class="{e['rev_class']}">{e['rev_txt']}</td></tr></tbody></table>{logo_html}<div class="bottom-stats"><div class="stat-row"><span>Rev r/r:</span><span class="{e['g_rev_cls']}">{e['rev_growth']}%</span></div><div class="stat-row"><span>EPS r/r:</span><span class="{e['g_eps_cls']}">{e['earn_growth']}%</span></div></div></div>"""
+        fund_html += card
+    fund_html += "</div>"
+    st.markdown(fund_html, unsafe_allow_html=True)
 
-st.write("---")
+st.divider()
 
-# 4. SKANER
-st.subheader(f"📡 Skaner Techniczny ({strat.split()[0]})")
-if st.button(f"🔍 SKANUJ {len(tickers)} SPÓŁEK", type="primary", use_container_width=True):
+# 4. SKANER (PEŁNA LISTA)
+st.subheader(f"📡 Skaner Techniczny ({len(tickers_scan)} spółek)")
+if st.button(f"🔍 SKANUJ CAŁY RYNEK", type="primary", use_container_width=True):
     prog = st.progress(0); stat = st.empty(); found = []
-    scan_limit = 100 # Limit dla płynności
     
-    for i, t in enumerate(tickers[:scan_limit]):
-        if i%5==0: prog.progress((i+1)/len(tickers[:scan_limit])); stat.text(f"Analiza: {t}")
+    # Limit 500 dla pełnego skanowania (może trwać ok. 60s)
+    scan_limit = len(tickers_scan) 
+    
+    for i, t in enumerate(tickers_scan):
+        if i%10==0: prog.progress((i+1)/scan_limit); stat.text(f"Analiza {i+1}/{scan_limit}: {t}")
         res = analyze_stock_tech(t, strat.split()[0], params)
         if res: found.append(res)
     prog.empty(); stat.empty()
+    
     if found:
         st.success(f"Znaleziono: {len(found)}")
         for item in found:
@@ -347,7 +344,7 @@ if st.button(f"🔍 SKANUJ {len(tickers)} SPÓŁEK", type="primary", use_contain
                 with c1:
                     st.write(f"**Sygnał:** {item['details']['info']}")
                     st.metric(item['details']['name'], item['details']['val'])
-                    if ".WA" in item['ticker']: link = f"https://www.biznesradar.pl/notowania/{item['ticker'].replace('.WA', '')}"; st.link_button("👉 BiznesRadar", link)
-                    else: link = f"https://finance.yahoo.com/quote/{item['ticker']}"; st.link_button("👉 Yahoo Finance", link)
+                    l = f"https://finance.yahoo.com/quote/{item['ticker']}"
+                    st.link_button("👉 Yahoo Finance", l)
                 with c2: st.line_chart(item['chart_data'].tail(60))
     else: st.warning("Brak wyników.")
