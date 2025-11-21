@@ -321,4 +321,89 @@ with st.sidebar:
     params['use_vol'] = st.checkbox("🎯 Wymagaj wolumenu", value=False, help="Zaznacz, aby odsiać spółki z małym obrotem.")
     
     # Status obrazka
-    if "❌" in CROC_MSG or
+    if "❌" in CROC_MSG or "⚠️" in CROC_MSG:
+        st.error(CROC_MSG)
+    else:
+        st.success(CROC_MSG)
+        
+    st.caption(f"Aktualizacja: {datetime.now().strftime('%H:%M')}")
+
+c1, c2 = st.columns([3,1])
+with c1: st.title("📈 KOLgejt")
+with c2: 
+    if st.button("🔄 Odśwież"): st.rerun()
+
+if "GPW" in market_choice: market="GPW"; tickers_scan=get_full_tickers_v11("GPW"); tickers_fund=POOL_GPW
+elif "Nasdaq" in market_choice: market="Nasdaq 100"; tickers_scan=get_full_tickers_v11("Nasdaq 100"); tickers_fund=POOL_NASDAQ
+else: market="S&P 500"; tickers_scan=get_full_tickers_v11("S&P 500"); tickers_fund=POOL_SP500
+
+st.subheader(f"🔥 Przepływ Rynku: {market}")
+with st.spinner("Analiza trendów (pobieram dane)..."): 
+    leaders, gainers, losers = get_market_overview_fixed(tickers_scan)
+
+cols = st.columns(5)
+for i, l in enumerate(leaders):
+    with cols[i]: st.metric(l['t'].replace('.WA',''), f"{l['p']:.2f}", f"{l['c']:.2f}%")
+
+st.write("---")
+st.write("**🚀 Top Wzrosty (Miesiąc)**")
+if gainers:
+    html = '<div class="scroll-container">'
+    for g in gainers:
+        link = get_link(g["t"])
+        html += f'<a href="{link}" target="_blank" class="mini-link"><div class="mini-card mini-card-up"><div class="mini-ticker">{g["t"].replace(".WA","")} 🔗</div><div class="mini-price">{g["p"]:.2f}</div><div class="mini-change text-green">+{g["mc"]:.2f}%</div></div></a>'
+    html += "</div>"
+    st.markdown(html, unsafe_allow_html=True)
+else: st.write("Brak wyraźnych wzrostów w analizowanej próbie.")
+
+st.write("**🔻 Top Spadki (Miesiąc)**")
+if losers:
+    html = '<div class="scroll-container">'
+    for l in losers:
+        link = get_link(l["t"])
+        html += f'<a href="{link}" target="_blank" class="mini-link"><div class="mini-card mini-card-down"><div class="mini-ticker">{l["t"].replace(".WA","")} 🔗</div><div class="mini-price">{l["p"]:.2f}</div><div class="mini-change text-red">{l["mc"]:.2f}%</div></div></a>'
+    html += "</div>"
+    st.markdown(html, unsafe_allow_html=True)
+else: st.write("Brak wyraźnych spadków w analizowanej próbie.")
+
+st.divider()
+
+with st.spinner("Szukam perełek fundamentalnych..."):
+    top_funds, best_pick = scan_fundamentals_v11(tickers_fund)
+
+st.subheader("🏆 Analyst Strong Buy")
+render_strong_buy_section(best_pick)
+
+st.write("---")
+st.subheader("💎 Top 5 Fundamentalnych")
+if top_funds:
+    html = '<div class="scroll-container">'
+    for e in top_funds:
+        logo_div = f'<div class="logo-container"><img src="{e["logo"]}" class="big-logo"></div>' if e['logo'] else '<div class="logo-container" style="height:60px;"></div>'
+        card = f'<div class="webull-card slider-card"><div class="card-header"><a href="{e["link"]}" target="_blank">{e["ticker"].replace(".WA","")} 🔗</a></div><table class="webull-table"><thead><tr><th>Wskaźnik</th><th>Prognoza</th><th>Wynik</th><th>Beat/Miss</th></tr></thead><tbody><tr><td>EPS</td><td>{e["eps_est"]}</td><td>{e["eps_act"]}</td><td class="{e["eps_cls"]}">{e["eps_txt"]}</td></tr><tr class="row-alt"><td>Przychód</td><td>{e["rev_est"]}</td><td>{e["rev_act"]}</td><td class="{e["rev_cls"]}">{e["rev_txt"]}</td></tr></tbody></table>{logo_div}<div class="bottom-stats"><div class="stat-row"><span>Rev r/r:</span><span class="{e["g_rev_cls"]}">{e["rev_growth"]}%</span></div><div class="stat-row"><span>EPS r/r:</span><span class="{e["g_eps_cls"]}">{e["earn_growth"]}%</span></div></div></div>'
+        html += card
+    html += "</div>"
+    st.markdown(html, unsafe_allow_html=True)
+
+st.divider()
+st.subheader(f"📡 Skaner Techniczny ({len(tickers_scan)} spółek)")
+if st.button(f"🔍 SKANUJ CAŁY RYNEK", type="primary", use_container_width=True):
+    prog = st.progress(0); stat = st.empty(); found = []
+    scan_limit = len(tickers_scan)
+    for i, t in enumerate(tickers_scan):
+        if i%10==0: prog.progress((i+1)/scan_limit); stat.text(f"Analiza {i+1}/{scan_limit}: {t}")
+        res = analyze_stock_tech(t, strat.split()[0], params)
+        if res: found.append(res)
+    prog.empty(); stat.empty()
+    if found:
+        st.success(f"Znaleziono: {len(found)}")
+        for item in found:
+            with st.expander(f"{item['ticker']} ({item['change']}%) - {item['price']}", expanded=True):
+                c1, c2 = st.columns([1,2])
+                with c1:
+                    st.write(f"**Sygnał:** {item['details']['info']}")
+                    st.metric(item['details']['name'], item['details']['val'])
+                    if ".WA" in item['ticker']: link = f"https://www.biznesradar.pl/notowania/{item['ticker'].replace('.WA', '')}"; st.link_button("👉 BiznesRadar", link)
+                    else: link = f"https://finance.yahoo.com/quote/{item['ticker']}"; st.link_button("👉 Yahoo Finance", link)
+                with c2: st.line_chart(item['chart_data'].tail(60))
+    else: st.warning("Brak wyników.")
