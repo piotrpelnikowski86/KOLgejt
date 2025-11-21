@@ -108,7 +108,7 @@ def format_large_num(num):
     return f"{num:.2f}"
 
 @st.cache_data(ttl=3600*12)
-def get_earnings_data_v4(ticker):
+def get_earnings_data_v5(ticker): # v5 dla odświeżenia
     try:
         stock = yf.Ticker(ticker)
         info = stock.info
@@ -204,3 +204,82 @@ def analyze_stock(ticker, strategy, params):
         
         if strategy == "RSI":
             rsi = calc_rsi(close, 14)
+            curr = rsi.iloc[-1]
+            if curr <= params['rsi_threshold']:
+                res = {"info": f"RSI: {round(curr, 1)}", "val": round(curr, 1), "name": "RSI"}
+                chart_lines = {'RSI': rsi}
+        elif strategy == "SMA":
+            sma = close.rolling(window=params['sma_period']).mean()
+            if close.iloc[-1] > sma.iloc[-1]:
+                res = {"info": "Cena nad SMA", "val": round(sma.iloc[-1], 2), "name": "SMA"}
+                chart_lines = {'SMA': sma}
+        
+        if res:
+            return {
+                "ticker": ticker, "price": round(close.iloc[-1], 2),
+                "change": round(((close.iloc[-1]-close.iloc[-2])/close.iloc[-2])*100, 2),
+                "details": res, "chart_data": data[['Close']].copy(), "extra_lines": chart_lines
+            }
+    except: return None
+    return None
+
+# --- UI ---
+with st.sidebar:
+    st.header("KOLgejt 7.5")
+    market_choice = st.radio("Giełda:", ["🇺🇸 S&P 500", "💻 Nasdaq 100", "🇵🇱 WIG20 (GPW)"])
+    st.divider()
+    strat = st.selectbox("Skaner:", ["RSI (Wyprzedanie)", "SMA (Trend)"])
+    params = {}
+    if "RSI" in strat: params['rsi_threshold'] = st.slider("RSI <", 20, 80, 40)
+    elif "SMA" in strat: params['sma_period'] = st.slider("SMA Period", 10, 200, 50)
+    st.caption(f"Aktualizacja: {datetime.now().strftime('%H:%M')}")
+
+c1, c2 = st.columns([3,1])
+with c1: st.title("📈 KOLgejt")
+with c2: 
+    if st.button("🔄 Odśwież"): st.rerun()
+
+if "WIG20" in market_choice: tickers=WIG20_FULL; market="WIG20"
+elif "Nasdaq" in market_choice: tickers=NASDAQ_TOP; market="Nasdaq 100"
+else: tickers=SP500_TOP; market="S&P 500"
+
+# 1. PULPIT
+st.subheader(f"🔥 Pulpit: {market}")
+with st.spinner("Analiza rynku..."):
+    leaders, gainers, losers = get_market_overview(tickers)
+
+cols = st.columns(5)
+for i, l in enumerate(leaders):
+    with cols[i]: st.metric(l['ticker'].replace('.WA',''), f"{l['price']:.2f}", f"{l['change']:.2f}%")
+
+st.write("---")
+st.markdown("### 🟩 Top 5 Wzrostów (Miesiąc)")
+if gainers:
+    gc = st.columns(5)
+    for i, g in enumerate(gainers):
+        with gc[i]: st.metric(g['ticker'].replace('.WA',''), f"{g['price']:.2f}", f"+{g['m_change']:.2f}%", delta_color="normal")
+st.write("") 
+st.markdown("### 🔻 Top 5 Spadków (Miesiąc)")
+if losers:
+    lc = st.columns(5)
+    for i, l in enumerate(losers):
+        with lc[i]: st.metric(l['ticker'].replace('.WA',''), f"{l['price']:.2f}", f"{l['m_change']:.2f}%", delta_color="normal")
+
+st.write("---")
+
+# 2. EARNINGS (HTML FLATTENED)
+st.subheader("💎 Spółka Fundamentalna (Potencjał)")
+earnings_html = '<div class="scroll-container">'
+with st.spinner("Szukam okazji fundamentalnych..."):
+    for t in tickers[:8]:
+        e = get_earnings_data_v5(t) # v5 cache buster
+        if e:
+            # Flattened HTML to avoid indentation errors in Python string
+            card = f"""<div class="webull-card"><div class="card-header">{e['ticker'].replace('.WA','')}</div><table class="webull-table"><thead><tr><th>Wskaźnik</th><th>Prognoza</th><th>Wynik</th><th>Beat/Miss</th></tr></thead><tbody><tr><td>EPS ($)</td><td>{e['eps_est']}</td><td>{e['eps_act']}</td><td class="{e['eps_class']}">{e['eps_txt']}</td></tr><tr class="row-alt"><td>Przychód</td><td>{e['rev_est']}</td><td>{e['rev_act']}</td><td class="{e['rev_class']}">{e['rev_txt']}</td></tr></tbody></table><div class="logo-container"><img src="{e['logo']}" class="big-logo" onerror="this.style.display='none'"></div><div class="bottom-stats"><div class="stat-row"><span>Przychody r/r:</span><span class="{e['growth_rev_class']}">{e['rev_growth']}%</span></div><div class="stat-row"><span>Zysk (EPS) r/r:</span><span class="{e['growth_eps_class']}">{e['earn_growth']}%</span></div></div></div>"""
+            earnings_html += card
+earnings_html += "</div>"
+st.markdown(earnings_html, unsafe_allow_html=True)
+
+st.write("---")
+
+# 3. SK
