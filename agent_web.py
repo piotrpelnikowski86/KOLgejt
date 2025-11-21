@@ -253,21 +253,28 @@ def get_link(ticker):
     if ".WA" in ticker: return f"https://www.biznesradar.pl/notowania/{ticker.replace('.WA', '')}"
     return f"https://finance.yahoo.com/quote/{ticker}"
 
-# --- RENDEROWANIE KROKODYLA Z JPG ---
+# --- RENDEROWANIE KROKODYLA (OBRAZEK Z PNG/JPG) ---
 def render_strong_buy_section(best_pick):
     if not best_pick:
         st.info("Brak 'Strong Buy' w tej grupie.")
         return
 
-    # Szukanie pliku krokodyl_poleca.jpg
+    # Szukamy pliku (priorytet dla nowej nazwy)
     img_b64 = None
-    if os.path.exists("krokodyl_poleca.jpg"):
-        img_b64 = get_img_as_base64("krokodyl_poleca.jpg")
+    check_files = ["krokodyl_poleca_wipe_bg.png", "krokodyl_poleca_wipe_bg.jpg", "krokodyl_poleca.png", "krokodyl.png"]
+    
+    found_file = False
+    for f in check_files:
+        if os.path.exists(f):
+            img_b64 = get_img_as_base64(f)
+            mime = "png" if f.endswith(".png") else "jpeg"
+            found_file = True
+            break
     
     if img_b64:
-        croc_src = f"data:image/jpeg;base64,{img_b64}"
+        croc_src = f"data:image/{mime};base64,{img_b64}"
     else:
-        # Zapas, jeśli plik jednak nie został wgrany
+        # Backup
         croc_src = "https://cdn-icons-png.flaticon.com/512/2328/2328979.png"
 
     e = best_pick
@@ -279,7 +286,7 @@ def render_strong_buy_section(best_pick):
 
 # --- UI ---
 with st.sidebar:
-    st.header("KOLgejt 25.0")
+    st.header("KOLgejt 27.0")
     market_choice = st.radio("Giełda:", ["🇺🇸 S&P 500", "💻 Nasdaq 100", "🇵🇱 GPW (WIG20 + mWIG40)"])
     st.divider()
     
