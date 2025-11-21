@@ -15,23 +15,19 @@ warnings.simplefilter(action='ignore', category=FutureWarning)
 # --- CSS ---
 st.markdown("""
 <style>
-/* Kontener slidera */
-.scroll-container {display: flex; overflow-x: auto; gap: 15px; padding: 15px 5px; width: 100%; scrollbar-width: thin; scrollbar-color: #555 #1E1E1E;}
-
-/* Bazowa karta */
+.scroll-container {display: flex; overflow-x: auto; gap: 15px; padding: 10px 5px; width: 100%; scrollbar-width: thin; scrollbar-color: #555 #1E1E1E;}
 .webull-card {flex: 0 0 auto; background-color: #262730; border-radius: 12px; border: 1px solid #41424C; overflow: visible; position: relative;}
-
-/* Mniejsza karta dla slidera */
 .slider-card {width: 250px; font-size: 11px;}
 
-/* Wrapper centrujący kartę Strong Buy */
+/* Kontener centrujący */
 .strong-buy-wrapper {
     position: relative;
     width: 320px; 
-    margin: 30px auto; /* Centrowanie */
+    margin: 20px auto; 
+    display: block;
 }
 
-/* Styl głównej karty Strong Buy */
+/* Karta Strong Buy */
 .strong-buy-card-style {
     width: 100%; 
     border: 2px solid #FFD700;
@@ -39,21 +35,23 @@ st.markdown("""
     z-index: 2; 
     background-color: #262730;
     border-radius: 12px;
+    position: relative; /* Ważne dla z-index */
 }
 
-/* Krokodyl - Pozycjonowanie (POPRAWIONE DLA SMARTFONÓW) */
+/* Krokodyl - POPRAWIONA POZYCJA */
 .croc-absolute {
     position: absolute;
-    bottom: -20px; 
-    left: -20px;   /* Zmieniono z -100px na -20px, aby przesunąć w prawo */
-    width: 160px;  
+    bottom: -10px;   /* Mniej w dół */
+    left: -70px;     /* Bliżej karty */
+    width: 120px;    /* Mniejszy rozmiar */
     height: auto;
     z-index: 3; 
     filter: drop-shadow(3px 3px 5px rgba(0,0,0,0.5)); 
     pointer-events: none;
+    display: block;
 }
 
-/* Pozostałe style */
+/* Reszta styli */
 .mini-card {flex: 0 0 auto; background-color: #1E1E1E; border-radius: 8px; width: 160px; padding: 10px; text-align: center; border: 1px solid #333; box-shadow: 0 2px 5px rgba(0,0,0,0.3); transition: transform 0.2s;}
 .mini-card:hover {transform: scale(1.03); border-color: #555;}
 .mini-card-up {border-top: 3px solid #00FF00;}
@@ -78,8 +76,6 @@ st.markdown("""
 .info-box {background-color: #262730; padding: 12px; border-left: 3px solid #00AAFF; border-radius: 5px; margin-bottom: 15px; font-size: 13px; line-height: 1.4;}
 .info-title {font-weight: bold; color: #00AAFF; margin-bottom: 5px; display: block;}
 [data-testid="column"] { display: flex; align-items: center; justify-content: center; }
-/* Przycisk Primary - pogrubienie i styl */
-div.stButton > button:first-child { font-weight: bold; border-radius: 8px; }
 </style>
 """, unsafe_allow_html=True)
 
@@ -97,13 +93,24 @@ def format_large_num(num):
     if num > 1e6: return f"{num/1e6:.2f}M"
     return f"{num:.2f}"
 
-# --- FUNKCJA DO KODOWANIA OBRAZKA NA BASE64 ---
-def get_img_as_base64(file_path):
-    try:
-        with open(file_path, "rb") as f:
-            data = f.read()
-        return base64.b64encode(data).decode()
-    except: return None
+# --- DIAGNOSTYKA OBRAZKA ---
+def get_local_image():
+    # Lista plików do sprawdzenia
+    files = ["krokodyl_poleca.jpg", "krokodyl_poleca.png", "krokodyl.jpg", "krokodyl.png"]
+    for f in files:
+        if os.path.exists(f):
+            try:
+                with open(f, "rb") as image_file:
+                    encoded_string = base64.b64encode(image_file.read()).decode()
+                ext = "png" if f.endswith(".png") else "jpeg"
+                return f"data:image/{ext};base64,{encoded_string}", f"✅ Załadowano: {f}"
+            except Exception as e:
+                return None, f"❌ Błąd odczytu: {f}"
+    
+    return "https://cdn-icons-png.flaticon.com/512/2328/2328979.png", "⚠️ Nie znaleziono pliku lokalnego. Używam zapasowego."
+
+# Globalne ładowanie obrazka
+CROC_SRC, CROC_MSG = get_local_image()
 
 @st.cache_data(ttl=3600)
 def get_full_tickers_v11(market):
@@ -255,28 +262,42 @@ def get_link(ticker):
     if ".WA" in ticker: return f"https://www.biznesradar.pl/notowania/{ticker.replace('.WA', '')}"
     return f"https://finance.yahoo.com/quote/{ticker}"
 
-# --- RENDEROWANIE KROKODYLA ---
+# --- RENDEROWANIE KROKODYLA (ZE STRUKTURĄ WRAPPERA) ---
 def render_strong_buy_section(best_pick):
     if not best_pick:
         st.info("Brak 'Strong Buy' w tej grupie.")
         return
 
-    if os.path.exists("krokodyl_poleca_wipe_bg.png"): croc_src = "krokodyl_poleca_wipe_bg.png"
-    elif os.path.exists("krokodyl_poleca_wipe_bg.jpg"): croc_src = "krokodyl_poleca_wipe_bg.jpg"
-    elif os.path.exists("krokodyl_poleca.png"): croc_src = "krokodyl_poleca.png"
-    elif os.path.exists("krokodyl.png"): croc_src = "krokodyl.png"
-    else: croc_src = "https://cdn-icons-png.flaticon.com/512/2328/2328979.png"
-
     e = best_pick
     logo_div = f'<div class="logo-container"><img src="{e["logo"]}" class="big-logo"></div>' if e['logo'] else '<div class="logo-container" style="height:60px;"></div>'
     
-    html_code = f"""<div class="strong-buy-wrapper"><img src="{croc_src}" class="croc-absolute"><div class="webull-card strong-buy-card-style"><div class="badge">STRONG BUY</div><div class="card-header"><a href="{e["link"]}" target="_blank">{e["ticker"].replace(".WA","")} 🔗</a></div><table class="webull-table"><thead><tr><th>Cel Cenowy</th><th>Potencjał</th><th>Wzrost EPS</th></tr></thead><tbody><tr><td>{e["target_price"]}</td><td class="text-green">+{e["upside"]:.1f}%</td><td class="{e["g_eps_cls"]}">{e["earn_growth"]}%</td></tr></tbody></table>{logo_div}<div class="bottom-stats" style="text-align:center;">Rekomendacja: <strong>STRONG BUY</strong><br>EPS Est: {e["eps_est"]}</div></div></div>"""
-    
+    # Konstrukcja HTML z krokodylem pozycjonowanym absolutnie
+    html_code = f"""
+    <div class="strong-buy-wrapper">
+        <img src="{CROC_SRC}" class="croc-absolute">
+        <div class="webull-card strong-buy-card-style">
+            <div class="badge">STRONG BUY</div>
+            <div class="card-header"><a href="{e["link"]}" target="_blank">{e["ticker"].replace(".WA","")} 🔗</a></div>
+            <table class="webull-table">
+                <thead><tr><th>Cel Cenowy</th><th>Potencjał</th><th>Wzrost EPS</th></tr></thead>
+                <tbody>
+                    <tr>
+                        <td>{e["target_price"]}</td>
+                        <td class="text-green">+{e["upside"]:.1f}%</td>
+                        <td class="{e["g_eps_cls"]}">{e["earn_growth"]}%</td>
+                    </tr>
+                </tbody>
+            </table>
+            {logo_div}
+            <div class="bottom-stats" style="text-align:center;">Rekomendacja: <strong>STRONG BUY</strong><br>EPS Est: {e["eps_est"]}</div>
+        </div>
+    </div>
+    """
     st.markdown(html_code, unsafe_allow_html=True)
 
 # --- UI ---
 with st.sidebar:
-    st.header("KOLgejt 28.1")
+    st.header("KOLgejt 29.0")
     market_choice = st.radio("Giełda:", ["🇺🇸 S&P 500", "💻 Nasdaq 100", "🇵🇱 GPW (WIG20 + mWIG40)"])
     st.divider()
     
@@ -299,86 +320,5 @@ with st.sidebar:
     st.write("")
     params['use_vol'] = st.checkbox("🎯 Wymagaj wolumenu", value=False, help="Zaznacz, aby odsiać spółki z małym obrotem.")
     
-    st.caption(f"Aktualizacja: {datetime.now().strftime('%H:%M')}")
-
-c1, c2 = st.columns([3,1])
-with c1: st.title("📈 KOLgejt")
-with c2: 
-    # NOWOCZESNY PRZYCISK ODŚWIEŻANIA
-    if st.button("⚡ ODŚWIEŻ DANE", type="primary", use_container_width=True):
-        st.rerun()
-
-if "GPW" in market_choice: market="GPW"; tickers_scan=get_full_tickers_v11("GPW"); tickers_fund=POOL_GPW
-elif "Nasdaq" in market_choice: market="Nasdaq 100"; tickers_scan=get_full_tickers_v11("Nasdaq 100"); tickers_fund=POOL_NASDAQ
-else: market="S&P 500"; tickers_scan=get_full_tickers_v11("S&P 500"); tickers_fund=POOL_SP500
-
-st.subheader(f"🔥 Przepływ Rynku: {market}")
-with st.spinner("Analiza trendów (pobieram dane)..."): 
-    leaders, gainers, losers = get_market_overview_fixed(tickers_scan)
-
-cols = st.columns(5)
-for i, l in enumerate(leaders):
-    with cols[i]: st.metric(l['t'].replace('.WA',''), f"{l['p']:.2f}", f"{l['c']:.2f}%")
-
-st.write("---")
-st.write("**🚀 Top Wzrosty (Miesiąc)**")
-if gainers:
-    html = '<div class="scroll-container">'
-    for g in gainers:
-        link = get_link(g["t"])
-        html += f'<a href="{link}" target="_blank" class="mini-link"><div class="mini-card mini-card-up"><div class="mini-ticker">{g["t"].replace(".WA","")} 🔗</div><div class="mini-price">{g["p"]:.2f}</div><div class="mini-change text-green">+{g["mc"]:.2f}%</div></div></a>'
-    html += "</div>"
-    st.markdown(html, unsafe_allow_html=True)
-else: st.write("Brak wyraźnych wzrostów w analizowanej próbie.")
-
-st.write("**🔻 Top Spadki (Miesiąc)**")
-if losers:
-    html = '<div class="scroll-container">'
-    for l in losers:
-        link = get_link(l["t"])
-        html += f'<a href="{link}" target="_blank" class="mini-link"><div class="mini-card mini-card-down"><div class="mini-ticker">{l["t"].replace(".WA","")} 🔗</div><div class="mini-price">{l["p"]:.2f}</div><div class="mini-change text-red">{l["mc"]:.2f}%</div></div></a>'
-    html += "</div>"
-    st.markdown(html, unsafe_allow_html=True)
-else: st.write("Brak wyraźnych spadków w analizowanej próbie.")
-
-st.divider()
-
-with st.spinner("Szukam perełek fundamentalnych..."):
-    top_funds, best_pick = scan_fundamentals_v11(tickers_fund)
-
-st.subheader("🏆 Analyst Strong Buy")
-render_strong_buy_section(best_pick)
-
-st.write("---")
-st.subheader("💎 Top 5 Fundamentalnych")
-if top_funds:
-    html = '<div class="scroll-container">'
-    for e in top_funds:
-        logo_div = f'<div class="logo-container"><img src="{e["logo"]}" class="big-logo"></div>' if e['logo'] else '<div class="logo-container" style="height:60px;"></div>'
-        card = f'<div class="webull-card slider-card"><div class="card-header"><a href="{e["link"]}" target="_blank">{e["ticker"].replace(".WA","")} 🔗</a></div><table class="webull-table"><thead><tr><th>Wskaźnik</th><th>Prognoza</th><th>Wynik</th><th>Beat/Miss</th></tr></thead><tbody><tr><td>EPS</td><td>{e["eps_est"]}</td><td>{e["eps_act"]}</td><td class="{e["eps_cls"]}">{e["eps_txt"]}</td></tr><tr class="row-alt"><td>Przychód</td><td>{e["rev_est"]}</td><td>{e["rev_act"]}</td><td class="{e["rev_cls"]}">{e["rev_txt"]}</td></tr></tbody></table>{logo_div}<div class="bottom-stats"><div class="stat-row"><span>Rev r/r:</span><span class="{e["g_rev_cls"]}">{e["rev_growth"]}%</span></div><div class="stat-row"><span>EPS r/r:</span><span class="{e["g_eps_cls"]}">{e["earn_growth"]}%</span></div></div></div>'
-        html += card
-    html += "</div>"
-    st.markdown(html, unsafe_allow_html=True)
-
-st.divider()
-st.subheader(f"📡 Skaner Techniczny ({len(tickers_scan)} spółek)")
-if st.button(f"🔍 SKANUJ CAŁY RYNEK", type="primary", use_container_width=True):
-    prog = st.progress(0); stat = st.empty(); found = []
-    scan_limit = len(tickers_scan)
-    for i, t in enumerate(tickers_scan):
-        if i%10==0: prog.progress((i+1)/scan_limit); stat.text(f"Analiza {i+1}/{scan_limit}: {t}")
-        res = analyze_stock_tech(t, strat.split()[0], params)
-        if res: found.append(res)
-    prog.empty(); stat.empty()
-    if found:
-        st.success(f"Znaleziono: {len(found)}")
-        for item in found:
-            with st.expander(f"{item['ticker']} ({item['change']}%) - {item['price']}", expanded=True):
-                c1, c2 = st.columns([1,2])
-                with c1:
-                    st.write(f"**Sygnał:** {item['details']['info']}")
-                    st.metric(item['details']['name'], item['details']['val'])
-                    if ".WA" in item['ticker']: link = f"https://www.biznesradar.pl/notowania/{item['ticker'].replace('.WA', '')}"; st.link_button("👉 BiznesRadar", link)
-                    else: link = f"https://finance.yahoo.com/quote/{item['ticker']}"; st.link_button("👉 Yahoo Finance", link)
-                with c2: st.line_chart(item['chart_data'].tail(60))
-    else: st.warning("Brak wyników.")
+    # Status obrazka
+    if "❌" in CROC_MSG or
