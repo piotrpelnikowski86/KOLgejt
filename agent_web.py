@@ -7,8 +7,12 @@ from io import StringIO
 from datetime import datetime
 
 # --- KONFIGURACJA ---
-st.set_page_config(page_title="KOLgejt", page_icon="📈", layout="wide")
+st.set_page_config(page_title="KOLgejt", page_icon="🐊", layout="wide")
 warnings.simplefilter(action='ignore', category=FutureWarning)
+
+# --- URL LOGO KROKODYLA ---
+# Tutaj wklej link do swojego obrazka. Na razie używam zastępczego "Cool Croc".
+KROKODYL_URL = "https://cdn-icons-png.flaticon.com/512/2328/2328979.png"
 
 # --- CSS ---
 st.markdown("""
@@ -22,7 +26,7 @@ st.markdown("""
 .mini-ticker {font-size: 16px; font-weight: bold; color: white; margin-bottom: 5px;}
 .mini-price {font-size: 14px; color: #CCC;}
 .mini-change {font-size: 14px; font-weight: bold; margin-top: 2px;}
-.strong-buy-card {border: 2px solid #FFD700; box-shadow: 0 0 15px rgba(255, 215, 0, 0.3);}
+.strong-buy-card {border: 2px solid #FFD700; box-shadow: 0 0 20px rgba(255, 215, 0, 0.4);}
 .badge {position: absolute; top: 10px; right: 10px; background-color: #FFD700; color: black; font-size: 10px; font-weight: bold; padding: 2px 6px; border-radius: 4px; z-index: 10;}
 .card-header {text-align: center; padding: 12px; background-color: #0E1117; border-bottom: 1px solid #41424C;}
 .card-header a {color: white; font-size: 18px; font-weight: bold; text-decoration: none;}
@@ -37,9 +41,30 @@ st.markdown("""
 .bottom-stats {padding: 10px; font-size: 11px; background-color: #1E1E1E; color: #CCC; border-top: 1px solid #41424C;}
 .stat-row {display: flex; justify-content: space-between; margin-bottom: 4px;}
 .mini-link {text-decoration: none; color: inherit; display: block;}
-/* Info Box w Sidebarze */
 .info-box {background-color: #262730; padding: 12px; border-left: 3px solid #00AAFF; border-radius: 5px; margin-bottom: 15px; font-size: 13px; line-height: 1.4;}
 .info-title {font-weight: bold; color: #00AAFF; margin-bottom: 5px; display: block;}
+
+/* NOWY KONTENER NA KARTĘ I KROKODYLA */
+.showcase-container {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 40px;
+    flex-wrap: wrap; /* Żeby na telefonie się nie rozjechało */
+    padding: 20px;
+    background: rgba(255, 255, 255, 0.03);
+    border-radius: 15px;
+    border: 1px solid #333;
+}
+.croc-image {
+    height: 200px;
+    object-fit: contain;
+    filter: drop-shadow(0 0 10px rgba(0,0,0,0.5));
+    transition: transform 0.3s;
+}
+.croc-image:hover {
+    transform: scale(1.1) rotate(-5deg);
+}
 </style>
 """, unsafe_allow_html=True)
 
@@ -209,7 +234,7 @@ def get_link(ticker):
 
 # --- UI ---
 with st.sidebar:
-    st.header("KOLgejt 14.0")
+    st.header("KOLgejt 15.1")
     market_choice = st.radio("Giełda:", ["🇺🇸 S&P 500", "💻 Nasdaq 100", "🇵🇱 GPW (WIG20 + mWIG40)"])
     st.divider()
     
@@ -260,60 +285,4 @@ if gainers:
         html += f'<a href="{link}" target="_blank" class="mini-link"><div class="mini-card mini-card-up"><div class="mini-ticker">{g["t"].replace(".WA","")} 🔗</div><div class="mini-price">{g["p"]:.2f}</div><div class="mini-change text-green">+{g["mc"]:.2f}%</div></div></a>'
     html += "</div>"
     st.markdown(html, unsafe_allow_html=True)
-else: st.write("Brak wyraźnych wzrostów w analizowanej próbie.")
-
-st.write("**🔻 Top Spadki (Miesiąc)**")
-if losers:
-    html = '<div class="scroll-container">'
-    for l in losers:
-        link = get_link(l["t"])
-        html += f'<a href="{link}" target="_blank" class="mini-link"><div class="mini-card mini-card-down"><div class="mini-ticker">{l["t"].replace(".WA","")} 🔗</div><div class="mini-price">{l["p"]:.2f}</div><div class="mini-change text-red">{l["mc"]:.2f}%</div></div></a>'
-    html += "</div>"
-    st.markdown(html, unsafe_allow_html=True)
-else: st.write("Brak wyraźnych spadków w analizowanej próbie.")
-
-st.divider()
-
-with st.spinner("Szukam perełek fundamentalnych..."):
-    top_funds, best_pick = scan_fundamentals_v11(tickers_fund)
-
-st.subheader("🏆 Analyst Strong Buy")
-if best_pick:
-    e = best_pick
-    logo_div = f'<div class="logo-container"><img src="{e["logo"]}" class="big-logo"></div>' if e['logo'] else '<div class="logo-container" style="height:60px;"></div>'
-    st.markdown(f'<div class="webull-card strong-buy-card" style="margin: 0 auto; display: block;"><div class="badge">STRONG BUY</div><div class="card-header"><a href="{e["link"]}" target="_blank">{e["ticker"].replace(".WA","")} 🔗</a></div><table class="webull-table"><thead><tr><th>Cel Cenowy</th><th>Potencjał</th><th>Wzrost EPS</th></tr></thead><tbody><tr><td>{e["target_price"]}</td><td class="text-green">+{e["upside"]:.1f}%</td><td class="{e["g_eps_cls"]}">{e["earn_growth"]}%</td></tr></tbody></table>{logo_div}<div class="bottom-stats" style="text-align:center;">Rekomendacja: <strong>STRONG BUY</strong><br>EPS Est: {e["eps_est"]}</div></div>', unsafe_allow_html=True)
-else: st.info("Brak 'Strong Buy' w tej grupie.")
-
-st.write("---")
-st.subheader("💎 Top 5 Fundamentalnych")
-if top_funds:
-    html = '<div class="scroll-container">'
-    for e in top_funds:
-        logo_div = f'<div class="logo-container"><img src="{e["logo"]}" class="big-logo"></div>' if e['logo'] else '<div class="logo-container" style="height:60px;"></div>'
-        card = f'<div class="webull-card"><div class="card-header"><a href="{e["link"]}" target="_blank">{e["ticker"].replace(".WA","")} 🔗</a></div><table class="webull-table"><thead><tr><th>Wskaźnik</th><th>Prognoza</th><th>Wynik</th><th>Beat/Miss</th></tr></thead><tbody><tr><td>EPS</td><td>{e["eps_est"]}</td><td>{e["eps_act"]}</td><td class="{e["eps_cls"]}">{e["eps_txt"]}</td></tr><tr class="row-alt"><td>Przychód</td><td>{e["rev_est"]}</td><td>{e["rev_act"]}</td><td class="{e["rev_cls"]}">{e["rev_txt"]}</td></tr></tbody></table>{logo_div}<div class="bottom-stats"><div class="stat-row"><span>Rev r/r:</span><span class="{e["g_rev_cls"]}">{e["rev_growth"]}%</span></div><div class="stat-row"><span>EPS r/r:</span><span class="{e["g_eps_cls"]}">{e["earn_growth"]}%</span></div></div></div>'
-        html += card
-    html += "</div>"
-    st.markdown(html, unsafe_allow_html=True)
-
-st.divider()
-st.subheader(f"📡 Skaner Techniczny ({len(tickers_scan)} spółek)")
-if st.button(f"🔍 SKANUJ CAŁY RYNEK", type="primary", use_container_width=True):
-    prog = st.progress(0); stat = st.empty(); found = []
-    scan_limit = len(tickers_scan)
-    for i, t in enumerate(tickers_scan):
-        if i%10==0: prog.progress((i+1)/scan_limit); stat.text(f"Analiza {i+1}/{scan_limit}: {t}")
-        res = analyze_stock_tech(t, strat.split()[0], params)
-        if res: found.append(res)
-    prog.empty(); stat.empty()
-    if found:
-        st.success(f"Znaleziono: {len(found)}")
-        for item in found:
-            with st.expander(f"{item['ticker']} ({item['change']}%) - {item['price']}", expanded=True):
-                c1, c2 = st.columns([1,2])
-                with c1:
-                    st.write(f"**Sygnał:** {item['details']['info']}")
-                    st.metric(item['details']['name'], item['details']['val'])
-                    if ".WA" in item['ticker']: link = f"https://www.biznesradar.pl/notowania/{item['ticker'].replace('.WA', '')}"; st.link_button("👉 BiznesRadar", link)
-                    else: link = f"https://finance.yahoo.com/quote/{item['ticker']}"; st.link_button("👉 Yahoo Finance", link)
-                with c2: st.line_chart(item['chart_data'].tail(60))
-    else: st.warning("Brak wyników.")
+else:
