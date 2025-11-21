@@ -38,12 +38,10 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-# --- LISTY FUNDAMENTALNE (DO SLIDERA) ---
+# --- DANE ---
 POOL_SP500 = ["NVDA", "META", "AMD", "AMZN", "MSFT", "GOOGL", "AAPL", "TSLA", "NFLX", "AVGO", "LLY", "JPM", "V", "MA", "COST", "PEP", "KO", "XOM", "CVX", "BRK-B", "DIS", "WMT", "HD", "PG", "MRK", "ABBV", "CRM", "ACN", "LIN", "ADBE"]
 POOL_NASDAQ = ["NVDA", "META", "AMD", "AMZN", "MSFT", "GOOGL", "AAPL", "TSLA", "NFLX", "AVGO", "COST", "PEP", "INTC", "CSCO", "TMUS", "CMCSA", "AMGN", "TXN", "QCOM", "HON", "INTU", "BKNG", "ISRG", "SBUX", "MDLZ", "GILD", "ADP", "LRCX"]
 POOL_GPW = ["PKN.WA", "PKO.WA", "PZU.WA", "PEO.WA", "DNP.WA", "KGH.WA", "LPP.WA", "ALE.WA", "CDR.WA", "SPL.WA", "CPS.WA", "PGE.WA", "KRU.WA", "KTY.WA", "ACP.WA", "MBK.WA", "JSW.WA", "ALR.WA", "TPE.WA", "CCC.WA", "XTB.WA", "ENA.WA", "MIL.WA", "BHW.WA", "ING.WA", "KRY.WA", "BDX.WA", "TEN.WA", "11B.WA", "TXT.WA", "GPP.WA", "APR.WA", "ASB.WA", "BMC.WA", "CIG.WA", "DAT.WA", "DOM.WA", "EAT.WA", "EUR.WA", "GPW.WA", "GTN.WA", "HUG.WA", "KER.WA", "LWB.WA", "MAB.WA", "MBR.WA", "MDG.WA", "MRC.WA", "NEU.WA", "OAT.WA", "PCR.WA", "PEP.WA", "PKP.WA", "PLW.WA", "RBW.WA", "RVU.WA", "SLV.WA", "STP.WA", "TOR.WA", "VGO.WA", "WPL.WA"]
-
-# LISTY ZAPASOWE DLA SKANERA
 BACKUP_NASDAQ = ["AAPL", "MSFT", "NVDA", "AMZN", "GOOGL", "META", "TSLA", "AVGO", "COST", "PEP", "AMD", "NFLX", "CSCO", "INTC", "TMUS", "CMCSA", "TXN", "AMAT", "QCOM", "HON", "INTU", "AMGN", "BKNG", "ISRG", "SBUX", "MDLZ", "GILD", "ADP", "LRCX", "ADI", "REGN", "VRTX", "MU", "PANW", "SNPS", "KLAC", "CDNS", "CHTR", "MELI", "MAR", "CSX", "PYPL", "MNST", "ORLY", "ASML", "NXPI", "CTAS", "WDAY", "FTNT", "KDP"]
 
 DOMAINS = {"AAPL": "apple.com", "MSFT": "microsoft.com", "NVDA": "nvidia.com", "GOOGL": "google.com", "AMZN": "amazon.com", "META": "meta.com", "TSLA": "tesla.com", "AMD": "amd.com", "NFLX": "netflix.com", "JPM": "jpmorganchase.com", "DIS": "disney.com", "AVGO": "broadcom.com", "PKN.WA": "orlen.pl", "PKO.WA": "pkobp.pl", "PZU.WA": "pzu.pl", "PEO.WA": "pekao.com.pl", "DNP.WA": "grupadino.pl", "KGH.WA": "kghm.com", "LPP.WA": "lpp.com", "ALE.WA": "allegro.eu", "CDR.WA": "cdprojekt.com", "SPL.WA": "santander.pl", "CPS.WA": "cyfrowypolsat.pl", "PGE.WA": "gkpge.pl", "CCC.WA": "ccc.eu", "XTB.WA": "xtb.com", "ING.WA": "ing.pl", "MBK.WA": "mbank.pl", "ALR.WA": "aliorbank.pl", "TPE.WA": "tauron.pl", "JSW.WA": "jsw.pl"}
@@ -54,7 +52,7 @@ def format_large_num(num):
     if num > 1e6: return f"{num/1e6:.2f}M"
     return f"{num:.2f}"
 
-# --- POBIERANIE PEŁNEJ LISTY DO SKANERA ---
+# --- LOGIKA POBIERANIA ---
 @st.cache_data(ttl=3600)
 def get_full_tickers_v11(market):
     headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"}
@@ -88,7 +86,6 @@ def scan_fundamentals_v11(tickers_list):
             info = stock.info
             rev_growth = info.get('revenueGrowth', 0)
             earn_growth = info.get('earningsGrowth', 0)
-            
             if not rev_growth or not earn_growth: continue
             
             score = (rev_growth * 100) + (earn_growth * 100)
@@ -165,9 +162,26 @@ def get_market_overview_v11(tickers):
         return sorted(changes, key=lambda x: x['mc'], reverse=True)[:5], changes[:5]
     except: return [], []
 
+# --- FUNKCJA GENERUJĄCA KARTY (BEZPIECZNA SKŁADNIA) ---
+def build_card_html(e):
+    # Dzielimy na części, żeby uniknąć SyntaxError przy kopiowaniu
+    logo_html = f'<div class="logo-container"><img src="{e["logo"]}" class="big-logo"></div>' if e['logo'] else '<div class="logo-container" style="height:60px;"></div>'
+    
+    html = '<div class="webull-card">'
+    html += f'<div class="card-header"><a href="{e["link"]}" target="_blank">{e["ticker"].replace(".WA","")} 🔗</a></div>'
+    html += '<table class="webull-table"><thead><tr><th>Wskaźnik</th><th>Prognoza</th><th>Wynik</th><th>Beat/Miss</th></tr></thead><tbody>'
+    html += f'<tr><td>EPS</td><td>{e["eps_est"]}</td><td>{e["eps_act"]}</td><td class="{e["eps_cls"]}">{e["eps_txt"]}</td></tr>'
+    html += f'<tr class="row-alt"><td>Przychód</td><td>{e["rev_est"]}</td><td>{e["rev_act"]}</td><td class="{e["rev_cls"]}">{e["rev_txt"]}</td></tr>'
+    html += f'</tbody></table>{logo_html}'
+    html += '<div class="bottom-stats">'
+    html += f'<div class="stat-row"><span>Rev r/r:</span><span class="{e["g_rev_cls"]}">{e["rev_growth"]}%</span></div>'
+    html += f'<div class="stat-row"><span>EPS r/r:</span><span class="{e["g_eps_cls"]}">{e["earn_growth"]}%</span></div>'
+    html += '</div></div>'
+    return html
+
 # --- UI ---
 with st.sidebar:
-    st.header("KOLgejt 11.0")
+    st.header("KOLgejt 11.1")
     market_choice = st.radio("Giełda:", ["🇺🇸 S&P 500", "💻 Nasdaq 100", "🇵🇱 GPW (WIG20 + mWIG40)"])
     st.divider()
     strat = st.selectbox("Skaner:", ["RSI (Wyprzedanie)", "SMA (Trend)"])
@@ -208,14 +222,22 @@ else: st.write("Brak danych.")
 
 st.divider()
 
-with st.spinner("Szukam perełek fundamentalnych (Smart Pool)..."):
+with st.spinner("Szukam perełek fundamentalnych..."):
     top_funds, best_pick = scan_fundamentals_v11(tickers_fund)
 
 st.subheader("🏆 Analyst Strong Buy")
 if best_pick:
     e = best_pick
+    # Bezpieczna budowa HTML
     logo_div = f'<div class="logo-container"><img src="{e["logo"]}" class="big-logo"></div>' if e['logo'] else '<div class="logo-container" style="height:60px;"></div>'
-    st.markdown(f'<div class="webull-card strong-buy-card" style="margin: 0 auto; display: block;"><div class="badge">STRONG BUY</div><div class="card-header"><a href="{e["link"]}" target="_blank">{e["ticker"].replace(".WA","")} 🔗</a></div><table class="webull-table"><thead><tr><th>Cel Cenowy</th><th>Potencjał</th><th>Wzrost EPS</th></tr></thead><tbody><tr><td>{e["target_price"]}</td><td class="text-green">+{e["upside"]:.1f}%</td><td class="{e["g_eps_cls"]}">{e["earn_growth"]}%</td></tr></tbody></table>{logo_div}<div class="bottom-stats" style="text-align:center;">Rekomendacja: <strong>STRONG BUY</strong><br>EPS Est: {e["eps_est"]}</div></div>', unsafe_allow_html=True)
+    card_html = '<div class="webull-card strong-buy-card" style="margin: 0 auto; display: block;">'
+    card_html += f'<div class="badge">STRONG BUY</div>'
+    card_html += f'<div class="card-header"><a href="{e["link"]}" target="_blank">{e["ticker"].replace(".WA","")} 🔗</a></div>'
+    card_html += '<table class="webull-table"><thead><tr><th>Cel Cenowy</th><th>Potencjał</th><th>Wzrost EPS</th></tr></thead><tbody>'
+    card_html += f'<tr><td>{e["target_price"]}</td><td class="text-green">+{e["upside"]:.1f}%</td><td class="{e["g_eps_cls"]}">{e["earn_growth"]}%</td></tr>'
+    card_html += f'</tbody></table>{logo_div}'
+    card_html += f'<div class="bottom-stats" style="text-align:center;">Rekomendacja: <strong>STRONG BUY</strong><br>EPS Est: {e["eps_est"]}</div></div>'
+    st.markdown(card_html, unsafe_allow_html=True)
 else: st.info("Brak 'Strong Buy' w tej grupie.")
 
 st.write("---")
@@ -223,9 +245,7 @@ st.subheader("💎 Top 5 Fundamentalnych")
 if top_funds:
     html = '<div class="scroll-container">'
     for e in top_funds:
-        logo_div = f'<div class="logo-container"><img src="{e["logo"]}" class="big-logo"></div>' if e['logo'] else '<div class="logo-container" style="height:60px;"></div>'
-        card = f'<div class="webull-card"><div class="card-header"><a href="{e["link"]}" target="_blank">{e["ticker"].replace(".WA","")} 🔗</a></div><table class="webull-table"><thead><tr><th>Wskaźnik</th><th>Prognoza</th><th>Wynik</th><th>Beat/Miss</th></tr></thead><tbody><tr><td>EPS</td><td>{e["eps_est"]}</td><td>{e["eps_act']}</td><td class="{e["eps_cls"]}">{e["eps_txt"]}</td></tr><tr class="row-alt"><td>Przychód</td><td>{e["rev_est"]}</td><td>{e["rev_act"]}</td><td class="{e["rev_cls"]}">{e["rev_txt"]}</td></tr></tbody></table>{logo_div}<div class="bottom-stats"><div class="stat-row"><span>Rev r/r:</span><span class="{e["g_rev_cls"]}">{e["rev_growth"]}%</span></div><div class="stat-row"><span>EPS r/r:</span><span class="{e["g_eps_cls"]}">{e["earn_growth"]}%</span></div></div></div>'
-        html += card
+        html += build_card_html(e) # Użycie bezpiecznej funkcji
     html += "</div>"
     st.markdown(html, unsafe_allow_html=True)
 
