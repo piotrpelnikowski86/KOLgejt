@@ -5,16 +5,17 @@ import warnings
 import requests
 from io import StringIO
 from datetime import datetime
+import os
 
 # --- KONFIGURACJA ---
-st.set_page_config(page_title="KOLgejt", page_icon="📈", layout="wide")
+st.set_page_config(page_title="KOLgejt", page_icon="🐊", layout="wide")
 warnings.simplefilter(action='ignore', category=FutureWarning)
 
 # --- CSS ---
 st.markdown("""
 <style>
 .scroll-container {display: flex; overflow-x: auto; gap: 15px; padding: 10px 5px; width: 100%; scrollbar-width: thin; scrollbar-color: #555 #1E1E1E;}
-.webull-card {flex: 0 0 auto; background-color: #262730; border-radius: 12px; width: 320px; border: 1px solid #41424C; overflow: hidden; position: relative;}
+.webull-card {flex: 0 0 auto; background-color: #262730; border-radius: 12px; width: 100%; border: 1px solid #41424C; overflow: hidden; position: relative;}
 .mini-card {flex: 0 0 auto; background-color: #1E1E1E; border-radius: 8px; width: 160px; padding: 10px; text-align: center; border: 1px solid #333; box-shadow: 0 2px 5px rgba(0,0,0,0.3); transition: transform 0.2s;}
 .mini-card:hover {transform: scale(1.03); border-color: #555;}
 .mini-card-up {border-top: 3px solid #00FF00;}
@@ -41,6 +42,10 @@ st.markdown("""
 .info-title {font-weight: bold; color: #00AAFF; margin-bottom: 5px; display: block;}
 </style>
 """, unsafe_allow_html=True)
+
+# --- NAZWA PLIKU Z KROKODYLEM ---
+# Upewnij się, że plik o tej nazwie jest wgrany na GitHub!
+CROC_IMAGE_FILE = "krokodyl_poleca.png"
 
 # --- LISTY ---
 POOL_SP500 = ["NVDA", "META", "AMD", "AMZN", "MSFT", "GOOGL", "AAPL", "TSLA", "NFLX", "AVGO", "LLY", "JPM", "V", "MA", "COST", "PEP", "KO", "XOM", "CVX", "BRK-B", "DIS", "WMT", "HD", "PG", "MRK", "ABBV", "CRM", "ACN", "LIN", "ADBE"]
@@ -73,7 +78,7 @@ def get_full_tickers_v11(market):
             return [str(x).replace('.', '-') for x in pd.read_csv(url)['Symbol'].tolist()]
         except:
             try:
-                tables = pd.read_html(requests.get('https://en.wikipedia.org/wiki/List_of_S%26P_500_companies', headers=headers).text)
+                tables = pd.read_html(requests.get('https://en.wikipedia.org/wiki/List_of_S%20P_500_companies', headers=headers).text)
                 return [str(x).replace('.', '-') for x in tables[0]['Symbol'].tolist()]
             except: return POOL_SP500 
     return []
@@ -206,9 +211,49 @@ def get_link(ticker):
     if ".WA" in ticker: return f"https://www.biznesradar.pl/notowania/{ticker.replace('.WA', '')}"
     return f"https://finance.yahoo.com/quote/{ticker}"
 
+# --- FUNKCJA DO GENEROWANIA KARTY Z KROKODYLEM (LOKALNYM) ---
+def render_strong_buy_section(best_pick):
+    if not best_pick:
+        st.info("Brak 'Strong Buy' w tej grupie.")
+        return
+
+    # Sprawdzamy, czy plik z krokodylem istnieje
+    if not os.path.exists(CROC_IMAGE_FILE):
+        st.error(f"⚠️ BŁĄD: Nie znaleziono pliku '{CROC_IMAGE_FILE}'. Wgraj go na GitHub!")
+        return
+
+    e = best_pick
+    logo_div = f'<div class="logo-container"><img src="{e["logo"]}" class="big-logo"></div>' if e['logo'] else '<div class="logo-container" style="height:60px;"></div>'
+    
+    c1, c2 = st.columns([2, 1])
+    
+    with c1:
+        st.markdown(f"""
+        <div class="webull-card strong-buy-card" style="width:100%;">
+            <div class="badge">STRONG BUY</div>
+            <div class="card-header"><a href="{e["link"]}" target="_blank">{e["ticker"].replace(".WA","")} 🔗</a></div>
+            <table class="webull-table">
+                <thead><tr><th>Cel Cenowy</th><th>Potencjał</th><th>Wzrost EPS</th></tr></thead>
+                <tbody>
+                    <tr>
+                        <td>{e["target_price"]}</td>
+                        <td class="text-green">+{e["upside"]:.1f}%</td>
+                        <td class="{e["g_eps_cls"]}">{e["earn_growth"]}%</td>
+                    </tr>
+                </tbody>
+            </table>
+            {logo_div}
+            <div class="bottom-stats" style="text-align:center;">Rekomendacja: <strong>STRONG BUY</strong><br>EPS Est: {e["eps_est"]}</div>
+        </div>
+        """, unsafe_allow_html=True)
+        
+    with c2:
+        # Wyświetlenie LOKALNEGO pliku krokodyla
+        st.image(CROC_IMAGE_FILE, width=180, caption="Polecam tę spółkę!")
+
 # --- UI ---
 with st.sidebar:
-    st.header("KOLgejt 12.1")
+    st.header("KOLgejt 16.1")
     market_choice = st.radio("Giełda:", ["🇺🇸 S&P 500", "💻 Nasdaq 100", "🇵🇱 GPW (WIG20 + mWIG40)"])
     st.divider()
     
@@ -259,8 +304,7 @@ if gainers:
         html += f'<a href="{link}" target="_blank" class="mini-link"><div class="mini-card mini-card-up"><div class="mini-ticker">{g["t"].replace(".WA","")} 🔗</div><div class="mini-price">{g["p"]:.2f}</div><div class="mini-change text-green">+{g["mc"]:.2f}%</div></div></a>'
     html += "</div>"
     st.markdown(html, unsafe_allow_html=True)
-else:
-    st.write("Brak wyraźnych wzrostów w analizowanej próbie.")
+else: st.write("Brak wyraźnych wzrostów w analizowanej próbie.")
 
 st.write("**🔻 Top Spadki (Miesiąc)**")
 if losers:
@@ -270,8 +314,7 @@ if losers:
         html += f'<a href="{link}" target="_blank" class="mini-link"><div class="mini-card mini-card-down"><div class="mini-ticker">{l["t"].replace(".WA","")} 🔗</div><div class="mini-price">{l["p"]:.2f}</div><div class="mini-change text-red">{l["mc"]:.2f}%</div></div></a>'
     html += "</div>"
     st.markdown(html, unsafe_allow_html=True)
-else:
-    st.write("Brak wyraźnych spadków w analizowanej próbie.")
+else: st.write("Brak wyraźnych spadków w analizowanej próbie.")
 
 st.divider()
 
@@ -279,11 +322,8 @@ with st.spinner("Szukam perełek fundamentalnych..."):
     top_funds, best_pick = scan_fundamentals_v11(tickers_fund)
 
 st.subheader("🏆 Analyst Strong Buy")
-if best_pick:
-    e = best_pick
-    logo_div = f'<div class="logo-container"><img src="{e["logo"]}" class="big-logo"></div>' if e['logo'] else '<div class="logo-container" style="height:60px;"></div>'
-    st.markdown(f'<div class="webull-card strong-buy-card" style="margin: 0 auto; display: block;"><div class="badge">STRONG BUY</div><div class="card-header"><a href="{e["link"]}" target="_blank">{e["ticker"].replace(".WA","")} 🔗</a></div><table class="webull-table"><thead><tr><th>Cel Cenowy</th><th>Potencjał</th><th>Wzrost EPS</th></tr></thead><tbody><tr><td>{e["target_price"]}</td><td class="text-green">+{e["upside"]:.1f}%</td><td class="{e["g_eps_cls"]}">{e["earn_growth"]}%</td></tr></tbody></table>{logo_div}<div class="bottom-stats" style="text-align:center;">Rekomendacja: <strong>STRONG BUY</strong><br>EPS Est: {e["eps_est"]}</div></div>', unsafe_allow_html=True)
-else: st.info("Brak 'Strong Buy' w tej grupie.")
+# WYWOŁANIE FUNKCJI RENDERUJĄCEJ KARTĘ I LOKALNEGO KROKODYLA
+render_strong_buy_section(best_pick)
 
 st.write("---")
 st.subheader("💎 Top 5 Fundamentalnych")
