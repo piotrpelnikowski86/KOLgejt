@@ -35,10 +35,11 @@ st.markdown("""
 .big-logo {height: 50px; width: 50px; object-fit: contain; border-radius: 8px; background-color: white; padding: 4px;}
 .bottom-stats {padding: 10px; font-size: 11px; background-color: #1E1E1E; color: #CCC; border-top: 1px solid #41424C;}
 .stat-row {display: flex; justify-content: space-between; margin-bottom: 4px;}
+.info-box {background-color: #1e2029; padding: 10px; border-left: 3px solid #00aaff; border-radius: 5px; margin-bottom: 10px; font-size: 13px;}
 </style>
 """, unsafe_allow_html=True)
 
-# --- DANE ---
+# --- LISTY ---
 POOL_SP500 = ["NVDA", "META", "AMD", "AMZN", "MSFT", "GOOGL", "AAPL", "TSLA", "NFLX", "AVGO", "LLY", "JPM", "V", "MA", "COST", "PEP", "KO", "XOM", "CVX", "BRK-B", "DIS", "WMT", "HD", "PG", "MRK", "ABBV", "CRM", "ACN", "LIN", "ADBE"]
 POOL_NASDAQ = ["NVDA", "META", "AMD", "AMZN", "MSFT", "GOOGL", "AAPL", "TSLA", "NFLX", "AVGO", "COST", "PEP", "INTC", "CSCO", "TMUS", "CMCSA", "AMGN", "TXN", "QCOM", "HON", "INTU", "BKNG", "ISRG", "SBUX", "MDLZ", "GILD", "ADP", "LRCX"]
 POOL_GPW = ["PKN.WA", "PKO.WA", "PZU.WA", "PEO.WA", "DNP.WA", "KGH.WA", "LPP.WA", "ALE.WA", "CDR.WA", "SPL.WA", "CPS.WA", "PGE.WA", "KRU.WA", "KTY.WA", "ACP.WA", "MBK.WA", "JSW.WA", "ALR.WA", "TPE.WA", "CCC.WA", "XTB.WA", "ENA.WA", "MIL.WA", "BHW.WA", "ING.WA", "KRY.WA", "BDX.WA", "TEN.WA", "11B.WA", "TXT.WA", "GPP.WA", "APR.WA", "ASB.WA", "BMC.WA", "CIG.WA", "DAT.WA", "DOM.WA", "EAT.WA", "EUR.WA", "GPW.WA", "GTN.WA", "HUG.WA", "KER.WA", "LWB.WA", "MAB.WA", "MBR.WA", "MDG.WA", "MRC.WA", "NEU.WA", "OAT.WA", "PCR.WA", "PEP.WA", "PKP.WA", "PLW.WA", "RBW.WA", "RVU.WA", "SLV.WA", "STP.WA", "TOR.WA", "VGO.WA", "WPL.WA"]
@@ -52,7 +53,6 @@ def format_large_num(num):
     if num > 1e6: return f"{num/1e6:.2f}M"
     return f"{num:.2f}"
 
-# --- LOGIKA POBIERANIA ---
 @st.cache_data(ttl=3600)
 def get_full_tickers_v11(market):
     headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"}
@@ -75,7 +75,6 @@ def get_full_tickers_v11(market):
             except: return POOL_SP500 
     return []
 
-# --- FUNDAMENTY ---
 @st.cache_data(ttl=3600*4)
 def scan_fundamentals_v11(tickers_list):
     fundamental_data = []
@@ -131,17 +130,40 @@ def analyze_stock_tech(ticker, strategy, params):
         data = yf.download(ticker, period="1y", progress=False, timeout=1, auto_adjust=False)
         if len(data) < 50: return None
         close = data['Close']
+        vol = data['Volume']
         res = None
-        if strategy == "RSI":
-            delta = close.diff()
-            gain = (delta.where(delta > 0, 0)).ewm(alpha=1/14, adjust=False).mean()
-            loss = (-delta.where(delta < 0, 0)).ewm(alpha=1/14, adjust=False).mean()
-            rsi = 100 - (100 / (1 + gain / loss))
-            curr = rsi.iloc[-1]
-            if curr <= params['rsi_threshold']: res = {"info": f"RSI: {round(curr, 1)}", "val": round(curr, 1), "name": "RSI"}
-        elif strategy == "SMA":
-            sma = close.rolling(window=params['sma_period']).mean()
-            if close.iloc[-1] > sma.iloc[-1]: res = {"info": "Cena nad SMA", "val": round(sma.iloc[-1], 2), "name": "SMA"}
+        
+        # LOGIKA WOLUMENU (Jeśli włączona)
+        vol_confirm = True
+        if params.get('use_vol', False):
+            avg_vol = vol.rolling(20).mean().iloc[-1]
+            curr_vol = vol.iloc[-1]
+            # Wymagamy, aby wolumen był przynajmniej 120% średniej
+            if curr_vol < avg_vol * 1.2:
+                vol_confirm = False
+
+        if vol_confirm:
+            if strategy == "RSI":
+                delta = close.diff()
+                gain = (delta.where(delta > 0, 0)).ewm(alpha=1/14, adjust=False).mean()
+                loss = (-delta.where(delta < 0, 0)).ewm(alpha=1/14, adjust=False).mean()
+                rsi = 100 - (100 / (1 + gain / loss))
+                curr = rsi.iloc[-1]
+                if curr <= params['rsi_threshold']:
+                    res = {"info": f"RSI: {round(curr, 1)} (Wyprzedanie)", "val": round(curr, 1), "name": "RSI"}
+            
+            elif strategy == "SMA":
+                sma = close.rolling(window=params['sma_period']).mean()
+                if close.iloc[-1] > sma.iloc[-1]:
+                    res = {"info": "Cena nad SMA (Trend Wzrostowy)", "val": round(sma.iloc[-1], 2), "name": "SMA"}
+            
+            elif strategy == "Bollinger":
+                sma = close.rolling(20).mean()
+                std = close.rolling(20).std()
+                low = sma - (2 * std)
+                if close.iloc[-1] <= low.iloc[-1] * 1.05:
+                    res = {"info": "Przy dolnej wstędze (Tani zakup)", "val": round(low.iloc[-1], 2), "name": "Low Band"}
+
         if res:
             return {"ticker": ticker, "price": round(close.iloc[-1], 2), "change": round(((close.iloc[-1]-close.iloc[-2])/close.iloc[-2])*100, 2), "details": res, "chart_data": data[['Close']].copy()}
     except: return None
@@ -162,32 +184,33 @@ def get_market_overview_v11(tickers):
         return sorted(changes, key=lambda x: x['mc'], reverse=True)[:5], changes[:5]
     except: return [], []
 
-# --- FUNKCJA GENERUJĄCA KARTY (BEZPIECZNA SKŁADNIA) ---
-def build_card_html(e):
-    # Dzielimy na części, żeby uniknąć SyntaxError przy kopiowaniu
-    logo_html = f'<div class="logo-container"><img src="{e["logo"]}" class="big-logo"></div>' if e['logo'] else '<div class="logo-container" style="height:60px;"></div>'
-    
-    html = '<div class="webull-card">'
-    html += f'<div class="card-header"><a href="{e["link"]}" target="_blank">{e["ticker"].replace(".WA","")} 🔗</a></div>'
-    html += '<table class="webull-table"><thead><tr><th>Wskaźnik</th><th>Prognoza</th><th>Wynik</th><th>Beat/Miss</th></tr></thead><tbody>'
-    html += f'<tr><td>EPS</td><td>{e["eps_est"]}</td><td>{e["eps_act"]}</td><td class="{e["eps_cls"]}">{e["eps_txt"]}</td></tr>'
-    html += f'<tr class="row-alt"><td>Przychód</td><td>{e["rev_est"]}</td><td>{e["rev_act"]}</td><td class="{e["rev_cls"]}">{e["rev_txt"]}</td></tr>'
-    html += f'</tbody></table>{logo_html}'
-    html += '<div class="bottom-stats">'
-    html += f'<div class="stat-row"><span>Rev r/r:</span><span class="{e["g_rev_cls"]}">{e["rev_growth"]}%</span></div>'
-    html += f'<div class="stat-row"><span>EPS r/r:</span><span class="{e["g_eps_cls"]}">{e["earn_growth"]}%</span></div>'
-    html += '</div></div>'
-    return html
-
 # --- UI ---
 with st.sidebar:
-    st.header("KOLgejt 11.1")
+    st.header("KOLgejt 12.0")
     market_choice = st.radio("Giełda:", ["🇺🇸 S&P 500", "💻 Nasdaq 100", "🇵🇱 GPW (WIG20 + mWIG40)"])
     st.divider()
-    strat = st.selectbox("Skaner:", ["RSI (Wyprzedanie)", "SMA (Trend)"])
+    
+    st.subheader("🛠️ Ustawienia Skanera")
+    strat = st.selectbox("Wybierz Strategię:", ["RSI (Wyprzedanie)", "SMA (Trend)", "Bollinger (Dołki)"])
+    
     params = {}
-    if "RSI" in strat: params['rsi_threshold'] = st.slider("RSI <", 20, 80, 40)
-    elif "SMA" in strat: params['sma_period'] = st.slider("SMA Period", 10, 200, 50)
+    
+    # RAMKA EDUKACYJNA
+    if "RSI" in strat:
+        st.markdown('<div class="info-box"><strong>💡 Co to robi?</strong><br>Szuka spółek, które spadły "za nisko" (wyprzedanie).<br><strong>Jak ustawić?</strong><br>• 30 = Agresywnie (Tylko panika)<br>• 40-50 = Umiarkowanie (Więcej wyników)</div>', unsafe_allow_html=True)
+        params['rsi_threshold'] = st.slider("Maksymalne RSI:", 20, 80, 40, help="Spółki z RSI poniżej tej wartości zostaną pokazane.")
+        
+    elif "SMA" in strat:
+        st.markdown('<div class="info-box"><strong>💡 Co to robi?</strong><br>Szuka spółek w trendzie wzrostowym (cena powyżej średniej).<br><strong>Jak ustawić?</strong><br>• 50 dni = Trend średnioterminowy<br>• 200 dni = Trend długoterminowy</div>', unsafe_allow_html=True)
+        params['sma_period'] = st.slider("Długość Średniej (Dni):", 10, 200, 50, help="Średnia cena z ilu ostatnich dni?")
+        
+    elif "Bollinger" in strat:
+        st.markdown('<div class="info-box"><strong>💡 Co to robi?</strong><br>Szuka momentów, gdy cena dotyka dolnej granicy statystycznej (okazja do odbicia). Nie wymaga konfiguracji.</div>', unsafe_allow_html=True)
+
+    # PRECYZJA - WOLUMEN
+    st.write("")
+    params['use_vol'] = st.checkbox("🎯 Wymagaj wysokiego wolumenu", value=False, help="Pokaż tylko spółki, gdzie obrót jest o 20% wyższy niż średnia. To potwierdza siłę ruchu.")
+    
     st.caption(f"Aktualizacja: {datetime.now().strftime('%H:%M')}")
 
 c1, c2 = st.columns([3,1])
@@ -222,22 +245,14 @@ else: st.write("Brak danych.")
 
 st.divider()
 
-with st.spinner("Szukam perełek fundamentalnych..."):
+with st.spinner("Szukam perełek fundamentalnych (Smart Pool)..."):
     top_funds, best_pick = scan_fundamentals_v11(tickers_fund)
 
 st.subheader("🏆 Analyst Strong Buy")
 if best_pick:
     e = best_pick
-    # Bezpieczna budowa HTML
     logo_div = f'<div class="logo-container"><img src="{e["logo"]}" class="big-logo"></div>' if e['logo'] else '<div class="logo-container" style="height:60px;"></div>'
-    card_html = '<div class="webull-card strong-buy-card" style="margin: 0 auto; display: block;">'
-    card_html += f'<div class="badge">STRONG BUY</div>'
-    card_html += f'<div class="card-header"><a href="{e["link"]}" target="_blank">{e["ticker"].replace(".WA","")} 🔗</a></div>'
-    card_html += '<table class="webull-table"><thead><tr><th>Cel Cenowy</th><th>Potencjał</th><th>Wzrost EPS</th></tr></thead><tbody>'
-    card_html += f'<tr><td>{e["target_price"]}</td><td class="text-green">+{e["upside"]:.1f}%</td><td class="{e["g_eps_cls"]}">{e["earn_growth"]}%</td></tr>'
-    card_html += f'</tbody></table>{logo_div}'
-    card_html += f'<div class="bottom-stats" style="text-align:center;">Rekomendacja: <strong>STRONG BUY</strong><br>EPS Est: {e["eps_est"]}</div></div>'
-    st.markdown(card_html, unsafe_allow_html=True)
+    st.markdown(f'<div class="webull-card strong-buy-card" style="margin: 0 auto; display: block;"><div class="badge">STRONG BUY</div><div class="card-header"><a href="{e["link"]}" target="_blank">{e["ticker"].replace(".WA","")} 🔗</a></div><table class="webull-table"><thead><tr><th>Cel Cenowy</th><th>Potencjał</th><th>Wzrost EPS</th></tr></thead><tbody><tr><td>{e["target_price"]}</td><td class="text-green">+{e["upside"]:.1f}%</td><td class="{e["g_eps_cls"]}">{e["earn_growth"]}%</td></tr></tbody></table>{logo_div}<div class="bottom-stats" style="text-align:center;">Rekomendacja: <strong>STRONG BUY</strong><br>EPS Est: {e["eps_est"]}</div></div>', unsafe_allow_html=True)
 else: st.info("Brak 'Strong Buy' w tej grupie.")
 
 st.write("---")
@@ -245,7 +260,9 @@ st.subheader("💎 Top 5 Fundamentalnych")
 if top_funds:
     html = '<div class="scroll-container">'
     for e in top_funds:
-        html += build_card_html(e) # Użycie bezpiecznej funkcji
+        logo_div = f'<div class="logo-container"><img src="{e["logo"]}" class="big-logo"></div>' if e['logo'] else '<div class="logo-container" style="height:60px;"></div>'
+        card = f'<div class="webull-card"><div class="card-header"><a href="{e["link"]}" target="_blank">{e["ticker"].replace(".WA","")} 🔗</a></div><table class="webull-table"><thead><tr><th>Wskaźnik</th><th>Prognoza</th><th>Wynik</th><th>Beat/Miss</th></tr></thead><tbody><tr><td>EPS</td><td>{e["eps_est"]}</td><td>{e["eps_act"]}</td><td class="{e["eps_cls"]}">{e["eps_txt"]}</td></tr><tr class="row-alt"><td>Przychód</td><td>{e["rev_est"]}</td><td>{e["rev_act"]}</td><td class="{e["rev_cls"]}">{e["rev_txt"]}</td></tr></tbody></table>{logo_div}<div class="bottom-stats"><div class="stat-row"><span>Rev r/r:</span><span class="{e["g_rev_cls"]}">{e["rev_growth"]}%</span></div><div class="stat-row"><span>EPS r/r:</span><span class="{e["g_eps_cls"]}">{e["earn_growth"]}%</span></div></div></div>'
+        html += card
     html += "</div>"
     st.markdown(html, unsafe_allow_html=True)
 
