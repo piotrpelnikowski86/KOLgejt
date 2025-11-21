@@ -107,9 +107,8 @@ def format_large_num(num):
     if num > 1e6: return f"{num/1e6:.2f}M"
     return f"{num:.2f}"
 
-# Zmiana nazwy funkcji na v2 wymusza odświeżenie cache i naprawia błąd KeyError
 @st.cache_data(ttl=3600*12)
-def get_earnings_data_v2(ticker):
+def get_earnings_data_v3(ticker): # Zmienione na v3 dla odświeżenia cache
     try:
         stock = yf.Ticker(ticker)
         info = stock.info
@@ -120,7 +119,6 @@ def get_earnings_data_v2(ticker):
         rev_act = info.get('totalRevenue', 0)
         rev_est = rev_act * 0.98
         
-        # Obliczenia
         if eps_est and eps_est != 0:
             eps_diff_pct = ((eps_act - eps_est) / abs(eps_est)) * 100
         else: eps_diff_pct = 0
@@ -153,7 +151,6 @@ def get_earnings_data_v2(ticker):
             "rev_class": rev_class,
             "rev_growth": round(rev_growth, 1),
             "earn_growth": round(earn_growth, 1),
-            # Te klucze są kluczowe dla naprawy błędu:
             "growth_rev_class": "text-green" if rev_growth > 0 else "text-red",
             "growth_eps_class": "text-green" if earn_growth > 0 else "text-red"
         }
@@ -228,14 +225,14 @@ def analyze_stock(ticker, strategy, params):
 
 # --- UI ---
 with st.sidebar:
-    st.header("KOLgejt 7.2")
+    st.header("KOLgejt 7.3")
     market_choice = st.radio("Giełda:", ["🇺🇸 S&P 500", "💻 Nasdaq 100", "🇵🇱 WIG20 (GPW)"])
     st.divider()
     strat = st.selectbox("Skaner:", ["RSI (Wyprzedanie)", "SMA (Trend)"])
     params = {}
     if "RSI" in strat: params['rsi_threshold'] = st.slider("RSI <", 20, 80, 40)
     elif "SMA" in strat: params['sma_period'] = st.slider("SMA Period", 10, 200, 50)
-    st.caption(f"Data: {datetime.now().strftime('%H:%M')}")
+    st.caption(f"Aktualizacja: {datetime.now().strftime('%H:%M')}")
 
 c1, c2 = st.columns([3,1])
 with c1: st.title("📈 KOLgejt")
@@ -270,42 +267,41 @@ if losers:
 
 st.write("---")
 
-# 2. EARNINGS (NAPRAWIONE)
+# 2. EARNINGS (KOD HTML SFORMATOWANY BEZ WCIĘĆ W PYTHONIE)
 st.subheader("💎 Spółka Fundamentalna (Potencjał)")
 earnings_html = '<div class="scroll-container">'
 with st.spinner("Szukam okazji fundamentalnych..."):
     for t in tickers[:8]:
-        e = get_earnings_data_v2(t) # Użycie nowej funkcji v2
+        e = get_earnings_data_v3(t)
         if e:
-            card = f"""
-            <div class="webull-card">
-                <div class="card-header">{e['ticker'].replace('.WA','')}</div>
-                <table class="webull-table">
-                    <thead>
-                        <tr><th>Wskaźnik</th><th>Prognoza</th><th>Wynik</th><th>Beat/Miss</th></tr>
-                    </thead>
-                    <tbody>
-                        <tr>
-                            <td>EPS ($)</td><td>{e['eps_est']}</td><td>{e['eps_act']}</td>
-                            <td class="{e['eps_class']}">{e['eps_txt']}</td>
-                        </tr>
-                        <tr class="row-alt">
-                            <td>Przychód</td><td>{e['rev_est']}</td><td>{e['rev_act']}</td>
-                            <td class="{e['rev_class']}">{e['rev_txt']}</td>
-                        </tr>
-                    </tbody>
-                </table>
-                <div class="logo-container"><img src="{e['logo']}" class="big-logo" onerror="this.style.display='none'"></div>
-                <div class="bottom-stats">
-                    <div class="stat-row">
-                        <span>Przychody r/r:</span><span class="{e['growth_rev_class']}">{e['rev_growth']}%</span>
-                    </div>
-                    <div class="stat-row">
-                        <span>Zysk (EPS) r/r:</span><span class="{e['growth_eps_class']}">{e['earn_growth']}%</span>
-                    </div>
-                </div>
-            </div>
-            """
+            # WAŻNE: Brak wcięć w f-stringu HTML!
+            card = f"""<div class="webull-card">
+<div class="card-header">{e['ticker'].replace('.WA','')}</div>
+<table class="webull-table">
+<thead>
+<tr><th>Wskaźnik</th><th>Prognoza</th><th>Wynik</th><th>Beat/Miss</th></tr>
+</thead>
+<tbody>
+<tr>
+<td>EPS ($)</td><td>{e['eps_est']}</td><td>{e['eps_act']}</td>
+<td class="{e['eps_class']}">{e['eps_txt']}</td>
+</tr>
+<tr class="row-alt">
+<td>Przychód</td><td>{e['rev_est']}</td><td>{e['rev_act']}</td>
+<td class="{e['rev_class']}">{e['rev_txt']}</td>
+</tr>
+</tbody>
+</table>
+<div class="logo-container"><img src="{e['logo']}" class="big-logo" onerror="this.style.display='none'"></div>
+<div class="bottom-stats">
+<div class="stat-row">
+<span>Przychody r/r:</span><span class="{e['growth_rev_class']}">{e['rev_growth']}%</span>
+</div>
+<div class="stat-row">
+<span>Zysk (EPS) r/r:</span><span class="{e['growth_eps_class']}">{e['earn_growth']}%</span>
+</div>
+</div>
+</div>"""
             earnings_html += card
 earnings_html += "</div>"
 st.markdown(earnings_html, unsafe_allow_html=True)
@@ -322,17 +318,3 @@ if st.button(f"🔍 SKANUJ {market}", type="primary", use_container_width=True):
         if res: found.append(res)
     prog.empty(); stat.empty()
     if found:
-        st.success(f"Znaleziono: {len(found)}")
-        for item in found:
-            with st.expander(f"{item['ticker']} ({item['change']}%) - {item['price']}", expanded=True):
-                c1, c2 = st.columns([1,2])
-                with c1:
-                    st.write(f"**Sygnał:** {item['details']['info']}")
-                    st.metric(item['details']['name'], item['details']['val'])
-                    if ".WA" in item['ticker']: link = f"https://www.biznesradar.pl/notowania/{item['ticker'].replace('.WA', '')}"; st.link_button("👉 BiznesRadar", link)
-                    else: link = f"https://finance.yahoo.com/quote/{item['ticker']}"; st.link_button("👉 Yahoo Finance", link)
-                with c2:
-                    ch = item['chart_data'].tail(60)
-                    for k,v in item['extra_lines'].items(): ch[k]=v
-                    st.line_chart(ch)
-    else: st.warning("Brak wyników.")
