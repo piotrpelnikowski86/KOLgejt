@@ -288,7 +288,7 @@ def render_strong_buy_section(best_pick):
 
 # --- UI ---
 with st.sidebar:
-    st.header("KOLgejt 30.0")
+    st.header("KOLgejt")
     market_choice = st.radio("Giełda:", ["🇺🇸 S&P 500", "💻 Nasdaq 100", "🇵🇱 GPW (WIG20 + mWIG40)"])
     st.divider()
     
@@ -393,3 +393,4 @@ if st.button(f"🔍 SKANUJ CAŁY RYNEK", type="primary", use_container_width=Tru
                     else: link = f"https://finance.yahoo.com/quote/{item['ticker']}"; st.link_button("👉 Yahoo Finance", link)
                 with c2: st.line_chart(item['chart_data'].tail(60))
     else: st.warning("Brak wyników.")
+
