@@ -59,7 +59,7 @@ def get_market_overview(tickers):
         # Pobieramy dane z 1 miesiąca dla wszystkich spółek
         data = yf.download(tickers, period="1mo", progress=False, timeout=5, group_by='ticker', auto_adjust=False)
         
-        # 1. Top 5 Liderów (Pierwsze 5 z listy - zazwyczaj największe kapitalizacją w moich listach)
+        # 1. Top 5 Liderów (wg kolejności na liście - zazwyczaj największe)
         leaders_data = []
         for t in tickers[:5]:
             try:
@@ -82,13 +82,13 @@ def get_market_overview(tickers):
             except: pass
         
         # Sortowanie
-        # Największe spadki (rosnąco) - czyli najbardziej na minusie
+        # Największe spadki (rosnąco - od najbardziej ujemnych)
         all_changes.sort(key=lambda x: x['month_change'])
-        losers = all_changes[:5] # Pierwsze 5 to największe minusy
+        losers = all_changes[:5]
         
-        # Największe wzrosty (malejąco)
+        # Największe wzrosty (malejąco - od największych dodatnich)
         all_changes.sort(key=lambda x: x['month_change'], reverse=True)
-        gainers = all_changes[:5] # Pierwsze 5 to największe plusy
+        gainers = all_changes[:5]
         
         return leaders_data, gainers, losers
     except Exception as e:
@@ -147,7 +147,7 @@ def analyze_stock(ticker, strategy, params):
 # --- INTERFEJS ---
 
 with st.sidebar:
-    st.header("KOLgejt 5.1")
+    st.header("KOLgejt 5.2")
     
     st.subheader("1. Wybór Rynku")
     market_choice = st.radio("Giełda:", ["🇺🇸 S&P 500", "💻 Nasdaq 100", "🇵🇱 WIG20 (GPW)"])
@@ -155,127 +155,4 @@ with st.sidebar:
     st.divider()
     
     st.subheader("2. Kryteria Skanera")
-    strat = st.selectbox("Wskaźnik:", ["RSI (Wyprzedanie)", "SMA (Trend)", "Bollinger (Dołki)"])
-    
-    params = {}
-    if "RSI" in strat:
-        params['rsi_threshold'] = st.slider("RSI poniżej:", 20, 80, 40)
-    elif "SMA" in strat:
-        params['sma_period'] = st.slider("Długość średniej:", 10, 200, 50)
-    elif "Bollinger" in strat:
-        st.info("Cena przy dolnej wstędze.")
-        
-    st.divider()
-    st.caption(f"Data: {datetime.now().strftime('%Y-%m-%d %H:%M')}")
-
-# GŁÓWNY EKRAN
-c1, c2 = st.columns([3, 1])
-with c1:
-    st.title("📈 KOLgejt")
-with c2:
-    if st.button("🔄 Odśwież dane"):
-        st.rerun()
-
-# Ustalanie listy tickerów
-if "WIG20" in market_choice:
-    tickers = WIG20_FULL
-    curr_market = "WIG20"
-elif "Nasdaq" in market_choice:
-    tickers = NASDAQ_TOP
-    curr_market = "Nasdaq 100"
-else:
-    tickers = SP500_TOP
-    curr_market = "S&P 500"
-
-# --- SEKCJA 1: PULPIT RYNKU ---
-
-st.subheader(f"🔥 Pulpit: {curr_market}")
-
-with st.spinner("Pobieram najnowsze dane..."):
-    leaders, gainers, losers = get_market_overview(tickers)
-
-# Liderzy (Top 5 indeksu)
-cols = st.columns(5)
-for i, item in enumerate(leaders):
-    with cols[i]:
-        # Kolorowanie delty: Green dla wzrostów, Red dla spadków (domyślne w Streamlit)
-        st.metric(item['ticker'].replace('.WA', ''), f"{item['price']:.2f}", f"{item['change']:.2f}%")
-
-st.write("")
-st.write("")
-
-# Wzrosty i Spadki (Miesiąc) - Dwie kolumny
-col_gain, col_loss = st.columns(2)
-
-with col_gain:
-    st.markdown("### 🟩 Top 5 Wzrostów (Miesiąc)")
-    if gainers:
-        for g in gainers:
-            st.metric(
-                g['ticker'].replace('.WA', ''), 
-                f"{g['price']:.2f}", 
-                f"+{g['month_change']:.2f}%",
-                delta_color="normal" # Zielony dla plusa
-            )
-    else:
-        st.write("Brak danych.")
-
-with col_loss:
-    st.markdown("### 🔻 Top 5 Spadków (Miesiąc)")
-    if losers:
-        for l in losers:
-            st.metric(
-                l['ticker'].replace('.WA', ''), 
-                f"{l['price']:.2f}", 
-                f"{l['month_change']:.2f}%",
-                delta_color="normal" # Czerwony dla minusa (domyślne zachowanie przy wartości ujemnej)
-            )
-    else:
-        st.write("Brak danych.")
-
-st.divider()
-
-# --- SEKCJA 2: SKANER ---
-st.subheader(f"📡 Skaner Techniczny ({strat.split()[0]})")
-
-# To była linijka z błędem - teraz jest kompletna:
-if st.button(f"🔍 SKANUJ {curr_market}", type="primary", use_container_width=True):
-    
-    progress = st.progress(0)
-    status = st.empty()
-    found = []
-    
-    for i, t in enumerate(tickers):
-        if i % 5 == 0: 
-            progress.progress((i+1)/len(tickers))
-            status.text(f"Analiza: {t}")
-        
-        res = analyze_stock(t, strat.split()[0], params)
-        if res: found.append(res)
-    
-    progress.empty()
-    status.empty()
-    
-    if found:
-        st.success(f"Znaleziono {len(found)} sygnałów!")
-        for item in found:
-            with st.expander(f"{item['ticker']} ({item['change']}%) - {item['price']}", expanded=True):
-                c1, c2 = st.columns([1, 2])
-                with c1:
-                    st.write(f"**Sygnał:** {item['details']['info']}")
-                    st.metric(item['details']['name'], item['details']['val'])
-                    
-                    if ".WA" in item['ticker']:
-                        link = f"https://www.biznesradar.pl/notowania/{item['ticker'].replace('.WA', '')}"
-                        st.link_button("👉 BiznesRadar", link)
-                    else:
-                        link = f"https://finance.yahoo.com/quote/{item['ticker']}"
-                        st.link_button("👉 Yahoo Finance", link)
-
-                with c2:
-                    chart = item['chart_data'].tail(60)
-                    for k, v in item['extra_lines'].items():
-                        chart[k] = v
-                    st.line_chart(chart)
-    else:
-        st.warning(f"Brak sygnałów na rynku {curr_market}. Spróbuj zmienić strategię.")
+    strat = st.selectbox("Wskaźnik:", ["RSI (Wyprzedanie)", "SMA
