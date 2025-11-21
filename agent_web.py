@@ -15,7 +15,6 @@ st.markdown("""
 <style>
 .scroll-container {display: flex; overflow-x: auto; gap: 15px; padding: 10px 5px; width: 100%; scrollbar-width: thin; scrollbar-color: #555 #1E1E1E;}
 .webull-card {flex: 0 0 auto; background-color: #262730; border-radius: 12px; width: 320px; border: 1px solid #41424C; overflow: hidden; position: relative;}
-/* Mini Karta - teraz z efektem hover */
 .mini-card {flex: 0 0 auto; background-color: #1E1E1E; border-radius: 8px; width: 160px; padding: 10px; text-align: center; border: 1px solid #333; box-shadow: 0 2px 5px rgba(0,0,0,0.3); transition: transform 0.2s;}
 .mini-card:hover {transform: scale(1.03); border-color: #555;}
 .mini-card-up {border-top: 3px solid #00FF00;}
@@ -37,8 +36,10 @@ st.markdown("""
 .big-logo {height: 50px; width: 50px; object-fit: contain; border-radius: 8px; background-color: white; padding: 4px;}
 .bottom-stats {padding: 10px; font-size: 11px; background-color: #1E1E1E; color: #CCC; border-top: 1px solid #41424C;}
 .stat-row {display: flex; justify-content: space-between; margin-bottom: 4px;}
-/* Link Wrapper dla Mini Kart */
 .mini-link {text-decoration: none; color: inherit; display: block;}
+/* Info Box w Sidebarze */
+.info-box {background-color: #262730; padding: 12px; border-left: 3px solid #00AAFF; border-radius: 5px; margin-bottom: 15px; font-size: 13px; line-height: 1.4;}
+.info-title {font-weight: bold; color: #00AAFF; margin-bottom: 5px; display: block;}
 </style>
 """, unsafe_allow_html=True)
 
@@ -147,51 +148,90 @@ def analyze_stock_tech(ticker, strategy, params):
                 loss = (-delta.where(delta < 0, 0)).ewm(alpha=1/14, adjust=False).mean()
                 rsi = 100 - (100 / (1 + gain / loss))
                 curr = rsi.iloc[-1]
-                if curr <= params['rsi_threshold']: res = {"info": f"RSI: {round(curr, 1)}", "val": round(curr, 1), "name": "RSI"}
+                if curr <= params['rsi_threshold']:
+                    res = {"info": f"RSI: {round(curr, 1)} (Wyprzedanie)", "val": round(curr, 1), "name": "RSI"}
             elif strategy == "SMA":
                 sma = close.rolling(window=params['sma_period']).mean()
-                if close.iloc[-1] > sma.iloc[-1]: res = {"info": "Cena nad SMA", "val": round(sma.iloc[-1], 2), "name": "SMA"}
+                if close.iloc[-1] > sma.iloc[-1]:
+                    res = {"info": "Cena nad SMA (Trend Wzrostowy)", "val": round(sma.iloc[-1], 2), "name": "SMA"}
             elif strategy == "Bollinger":
                 sma = close.rolling(20).mean()
                 std = close.rolling(20).std()
                 low = sma - (2 * std)
-                if close.iloc[-1] <= low.iloc[-1] * 1.05: res = {"info": "Przy dolnej wstędze", "val": round(low.iloc[-1], 2), "name": "Low Band"}
+                if close.iloc[-1] <= low.iloc[-1] * 1.05:
+                    res = {"info": "Przy dolnej wstędze (Tani zakup)", "val": round(low.iloc[-1], 2), "name": "Low Band"}
         if res:
             return {"ticker": ticker, "price": round(close.iloc[-1], 2), "change": round(((close.iloc[-1]-close.iloc[-2])/close.iloc[-2])*100, 2), "details": res, "chart_data": data[['Close']].copy()}
     except: return None
     return None
 
-def get_market_overview_v11(tickers):
+def get_market_overview_fixed(tickers):
     try:
-        preview = tickers[:30] if len(tickers) > 30 else tickers
+        preview = tickers[:50] if len(tickers) > 50 else tickers
         data = yf.download(preview, period="1mo", progress=False, timeout=5, group_by='ticker', auto_adjust=False)
-        changes = []
+        valid_data = []
         for t in preview:
             try:
-                if len(data[t]) > 10:
-                    c, s = data[t]['Close'].iloc[-1], data[t]['Close'].iloc[0]
-                    changes.append({"t": t, "mc": ((c-s)/s)*100, "p": c})
-            except: pass
-        changes.sort(key=lambda x: x['mc'])
-        return sorted(changes, key=lambda x: x['mc'], reverse=True)[:5], changes[:5]
-    except: return [], []
+                if t in data and not data[t]['Close'].empty:
+                    series = data[t]['Close'].dropna()
+                    if len(series) > 5:
+                        curr = series.iloc[-1]
+                        prev = series.iloc[-2]
+                        start = series.iloc[0]
+                        day_chg = ((curr - prev) / prev) * 100
+                        mon_chg = ((curr - start) / start) * 100
+                        if pd.notna(mon_chg) and pd.notna(day_chg):
+                            valid_data.append({"t": t, "p": curr, "c": day_chg, "mc": mon_chg})
+            except: continue
+        
+        leaders = []
+        count = 0
+        for item in valid_data:
+            if item['t'] in tickers[:15]:
+                leaders.append(item)
+                count += 1
+            if count >= 5: break
+            
+        gainers = [x for x in valid_data if x['mc'] > 0]
+        gainers.sort(key=lambda x: x['mc'], reverse=True)
+        gainers = gainers[:5]
+        
+        losers = [x for x in valid_data if x['mc'] < 0]
+        losers.sort(key=lambda x: x['mc']) 
+        losers = losers[:5]
+        
+        return leaders, gainers, losers
+    except Exception as e: return [], [], []
+
+def get_link(ticker):
+    if ".WA" in ticker: return f"https://www.biznesradar.pl/notowania/{ticker.replace('.WA', '')}"
+    return f"https://finance.yahoo.com/quote/{ticker}"
 
 # --- UI ---
 with st.sidebar:
-    st.header("KOLgejt 13.0")
+    st.header("KOLgejt 14.0")
     market_choice = st.radio("Giełda:", ["🇺🇸 S&P 500", "💻 Nasdaq 100", "🇵🇱 GPW (WIG20 + mWIG40)"])
     st.divider()
+    
+    st.subheader("🛠️ Ustawienia Skanera")
     strat = st.selectbox("Wybierz Strategię:", ["RSI (Wyprzedanie)", "SMA (Trend)", "Bollinger (Dołki)"])
+    
     params = {}
+    
     if "RSI" in strat:
-        st.markdown('<div class="info-box"><strong>💡 RSI:</strong> Szuka dołków (wyprzedania).</div>', unsafe_allow_html=True)
-        params['rsi_threshold'] = st.slider("Max RSI:", 20, 80, 40)
+        st.markdown('<div class="info-box"><span class="info-title">💡 Co to jest RSI?</span>Szuka spółek, które spadły "za nisko" i mogą odbić.<br>• <strong>< 30:</strong> Silna panika (Agresywnie)<br>• <strong>< 40-50:</strong> Korekta (Bezpieczniej)</div>', unsafe_allow_html=True)
+        params['rsi_threshold'] = st.slider("Maksymalne RSI:", 20, 80, 40)
+        
     elif "SMA" in strat:
-        st.markdown('<div class="info-box"><strong>💡 SMA:</strong> Gra z trendem (cena nad średnią).</div>', unsafe_allow_html=True)
+        st.markdown('<div class="info-box"><span class="info-title">💡 Co to jest SMA?</span>Gra z trendem. Szuka spółek, których cena jest powyżej średniej kroczącej.<br>• <strong>50 dni:</strong> Trend średnioterminowy<br>• <strong>200 dni:</strong> Trend długoterminowy</div>', unsafe_allow_html=True)
         params['sma_period'] = st.slider("Średnia (Dni):", 10, 200, 50)
-    elif "Bollinger" in strat: st.info("Cena przy dolnej wstędze (okazja).")
+        
+    elif "Bollinger" in strat:
+        st.markdown('<div class="info-box"><span class="info-title">💡 Wstęgi Bollingera</span>Statystyczne odchylenie ceny. Skaner szuka momentów, gdy cena dotyka <strong>dolnej wstęgi</strong> (statystycznie "tani" moment na zakup).</div>', unsafe_allow_html=True)
+
     st.write("")
-    params['use_vol'] = st.checkbox("🎯 Wymagaj wolumenu", value=False)
+    params['use_vol'] = st.checkbox("🎯 Wymagaj wolumenu", value=False, help="Zaznacz, aby odsiać spółki z małym obrotem.")
+    
     st.caption(f"Aktualizacja: {datetime.now().strftime('%H:%M')}")
 
 c1, c2 = st.columns([3,1])
@@ -204,13 +244,14 @@ elif "Nasdaq" in market_choice: market="Nasdaq 100"; tickers_scan=get_full_ticke
 else: market="S&P 500"; tickers_scan=get_full_tickers_v11("S&P 500"); tickers_fund=POOL_SP500
 
 st.subheader(f"🔥 Przepływ Rynku: {market}")
-with st.spinner("Analiza trendów..."): gainers, losers = get_market_overview_v11(tickers_scan)
+with st.spinner("Analiza trendów (pobieram dane)..."): 
+    leaders, gainers, losers = get_market_overview_fixed(tickers_scan)
 
-# FUNKCJA POMOCNICZA DO LINKÓW
-def get_link(ticker):
-    if ".WA" in ticker: return f"https://www.biznesradar.pl/notowania/{ticker.replace('.WA', '')}"
-    return f"https://finance.yahoo.com/quote/{ticker}"
+cols = st.columns(5)
+for i, l in enumerate(leaders):
+    with cols[i]: st.metric(l['t'].replace('.WA',''), f"{l['p']:.2f}", f"{l['c']:.2f}%")
 
+st.write("---")
 st.write("**🚀 Top Wzrosty (Miesiąc)**")
 if gainers:
     html = '<div class="scroll-container">'
@@ -219,7 +260,7 @@ if gainers:
         html += f'<a href="{link}" target="_blank" class="mini-link"><div class="mini-card mini-card-up"><div class="mini-ticker">{g["t"].replace(".WA","")} 🔗</div><div class="mini-price">{g["p"]:.2f}</div><div class="mini-change text-green">+{g["mc"]:.2f}%</div></div></a>'
     html += "</div>"
     st.markdown(html, unsafe_allow_html=True)
-else: st.write("Brak danych.")
+else: st.write("Brak wyraźnych wzrostów w analizowanej próbie.")
 
 st.write("**🔻 Top Spadki (Miesiąc)**")
 if losers:
@@ -229,7 +270,7 @@ if losers:
         html += f'<a href="{link}" target="_blank" class="mini-link"><div class="mini-card mini-card-down"><div class="mini-ticker">{l["t"].replace(".WA","")} 🔗</div><div class="mini-price">{l["p"]:.2f}</div><div class="mini-change text-red">{l["mc"]:.2f}%</div></div></a>'
     html += "</div>"
     st.markdown(html, unsafe_allow_html=True)
-else: st.write("Brak danych.")
+else: st.write("Brak wyraźnych spadków w analizowanej próbie.")
 
 st.divider()
 
