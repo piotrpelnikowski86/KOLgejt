@@ -15,8 +15,7 @@ warnings.simplefilter(action='ignore', category=FutureWarning)
 st.markdown("""
 <style>
 .scroll-container {display: flex; overflow-x: auto; gap: 15px; padding: 10px 5px; width: 100%; scrollbar-width: thin; scrollbar-color: #555 #1E1E1E;}
-/* Zmiana: overflow visible, żeby cień i elementy mogły wystawać */
-.webull-card {flex: 0 0 auto; background-color: #262730; border-radius: 12px; width: 320px; border: 1px solid #41424C; overflow: visible; position: relative;}
+.webull-card {flex: 0 0 auto; background-color: #262730; border-radius: 12px; width: 100%; border: 1px solid #41424C; overflow: visible; position: relative;}
 .mini-card {flex: 0 0 auto; background-color: #1E1E1E; border-radius: 8px; width: 160px; padding: 10px; text-align: center; border: 1px solid #333; box-shadow: 0 2px 5px rgba(0,0,0,0.3); transition: transform 0.2s;}
 .mini-card:hover {transform: scale(1.03); border-color: #555;}
 .mini-card-up {border-top: 3px solid #00FF00;}
@@ -24,10 +23,8 @@ st.markdown("""
 .mini-ticker {font-size: 16px; font-weight: bold; color: white; margin-bottom: 5px;}
 .mini-price {font-size: 14px; color: #CCC;}
 .mini-change {font-size: 14px; font-weight: bold; margin-top: 2px;}
-/* Zmiana: większy cień dla strong buy */
 .strong-buy-card {border: 2px solid #FFD700; box-shadow: 0 0 25px rgba(255, 215, 0, 0.4); z-index: 2;}
 .badge {position: absolute; top: 10px; right: 10px; background-color: #FFD700; color: black; font-size: 10px; font-weight: bold; padding: 2px 6px; border-radius: 4px; z-index: 10;}
-/* Zmiana: zaokrąglenie nagłówka, bo overflow jest visible */
 .card-header {text-align: center; padding: 12px; background-color: #0E1117; border-bottom: 1px solid #41424C; border-top-left-radius: 12px; border-top-right-radius: 12px;}
 .card-header a {color: white; font-size: 18px; font-weight: bold; text-decoration: none;}
 .webull-table {width: 100%; border-collapse: collapse; font-size: 12px; text-align: center; color: #DDD;}
@@ -43,25 +40,6 @@ st.markdown("""
 .mini-link {text-decoration: none; color: inherit; display: block;}
 .info-box {background-color: #262730; padding: 12px; border-left: 3px solid #00AAFF; border-radius: 5px; margin-bottom: 15px; font-size: 13px; line-height: 1.4;}
 .info-title {font-weight: bold; color: #00AAFF; margin-bottom: 5px; display: block;}
-
-/* --- NOWE STYLE DLA POZYCJONOWANIA KROKODYLA --- */
-.showcase-wrapper {
-    position: relative;
-    width: 320px; /* Szerokość taka sama jak karty */
-    margin: 40px auto 60px auto; /* Centrowanie na środku + marginesy góra/dół */
-}
-
-.floating-croc {
-    position: absolute;
-    bottom: -30px; /* Przesunięcie w dół względem karty */
-    left: -120px;  /* Przesunięcie w lewo względem karty */
-    width: 160px;  /* Mniejszy rozmiar krokodyla */
-    height: auto;
-    transform: rotate(-8deg); /* Lekki obrót dla dynamiki */
-    z-index: 1; /* Krokodyl jest jakby "za" lub "przy" karcie */
-    filter: drop-shadow(3px 3px 5px rgba(0,0,0,0.4)); /* Cień dla krokodyla */
-    pointer-events: none; /* Żeby nie przeszkadzał w klikaniu */
-}
 </style>
 """, unsafe_allow_html=True)
 
@@ -229,51 +207,35 @@ def get_link(ticker):
     if ".WA" in ticker: return f"https://www.biznesradar.pl/notowania/{ticker.replace('.WA', '')}"
     return f"https://finance.yahoo.com/quote/{ticker}"
 
-# --- RENDEROWANIE KROKODYLA (NOWY UKŁAD: ZINTEGROWANY) ---
+# --- FUNKCJA DO GENEROWANIA KARTY Z KROKODYLEM ---
 def render_strong_buy_section(best_pick):
     if not best_pick:
         st.info("Brak 'Strong Buy' w tej grupie.")
         return
 
-    # Szukanie pliku
-    if os.path.exists("krokodyl_poleca.png.png"): croc_src = "krokodyl_poleca.png.png"
-    elif os.path.exists("krokodyl_poleca.png"): croc_src = "krokodyl_poleca.png"
+    # Auto-detekcja nazwy pliku
+    if os.path.exists("krokodyl_poleca.png"): croc_src = "krokodyl_poleca.png"
+    elif os.path.exists("krokodyl_poleca.png.png"): croc_src = "krokodyl_poleca.png.png"
     elif os.path.exists("krokodyl.png"): croc_src = "krokodyl.png"
+    elif os.path.exists("polecam2.jpg"): croc_src = "polecam2.jpg"
     else: croc_src = "https://cdn-icons-png.flaticon.com/512/2328/2328979.png"
 
     e = best_pick
     logo_div = f'<div class="logo-container"><img src="{e["logo"]}" class="big-logo"></div>' if e['logo'] else '<div class="logo-container" style="height:60px;"></div>'
     
-    # NOWA STRUKTURA HTML: Wrapper centrujący -> Krokodyl (absolute) + Karta
-    # Używamy st.markdown do wygenerowania całości w jednym bloku
+    c1, c2 = st.columns([2, 3])
     
-    html_structure = f"""
-    <div class="showcase-wrapper">
-        <img src="{croc_src}" class="floating-croc">
-        
-        <div class="webull-card strong-buy-card" style="margin: 0 auto;">
-            <div class="badge">STRONG BUY</div>
-            <div class="card-header"><a href="{e["link"]}" target="_blank">{e["ticker"].replace(".WA","")} 🔗</a></div>
-            <table class="webull-table">
-                <thead><tr><th>Cel Cenowy</th><th>Potencjał</th><th>Wzrost EPS</th></tr></thead>
-                <tbody>
-                    <tr>
-                        <td>{e["target_price"]}</td>
-                        <td class="text-green">+{e["upside"]:.1f}%</td>
-                        <td class="{e["g_eps_cls"]}">{e["earn_growth"]}%</td>
-                    </tr>
-                </tbody>
-            </table>
-            {logo_div}
-            <div class="bottom-stats" style="text-align:center;">Rekomendacja: <strong>STRONG BUY</strong><br>EPS Est: {e["eps_est"]}</div>
-        </div>
-    </div>
-    """
-    st.markdown(html_structure, unsafe_allow_html=True)
+    with c1:
+        st.image(croc_src, use_container_width=True)
+
+    with c2:
+        # HTML W JEDNEJ LINII - TO NAPRAWIA BŁĄD!
+        html_code = f"""<div class="webull-card strong-buy-card" style="width:100%;"><div class="badge">STRONG BUY</div><div class="card-header"><a href="{e["link"]}" target="_blank">{e["ticker"].replace(".WA","")} 🔗</a></div><table class="webull-table"><thead><tr><th>Cel Cenowy</th><th>Potencjał</th><th>Wzrost EPS</th></tr></thead><tbody><tr><td>{e["target_price"]}</td><td class="text-green">+{e["upside"]:.1f}%</td><td class="{e["g_eps_cls"]}">{e["earn_growth"]}%</td></tr></tbody></table>{logo_div}<div class="bottom-stats" style="text-align:center;">Rekomendacja: <strong>STRONG BUY</strong><br>EPS Est: {e["eps_est"]}</div></div>"""
+        st.markdown(html_code, unsafe_allow_html=True)
 
 # --- UI ---
 with st.sidebar:
-    st.header("KOLgejt 18.1")
+    st.header("KOLgejt 19.1")
     market_choice = st.radio("Giełda:", ["🇺🇸 S&P 500", "💻 Nasdaq 100", "🇵🇱 GPW (WIG20 + mWIG40)"])
     st.divider()
     
