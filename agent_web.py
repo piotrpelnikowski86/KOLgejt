@@ -162,4 +162,40 @@ st.write("")
 st.markdown("### 🔻 Top Spadki (Miesiąc)")
 if losers:
     lc = st.columns(5)
-    
+    for i, l in enumerate(losers):
+        with lc[i]: st.metric(l['ticker'].replace('.WA',''), f"{l['price']:.2f}", f"{l['m_change']:.2f}%", delta_color="normal")
+
+st.write("---")
+st.subheader("💎 Spółka Fundamentalna (Potencjał)")
+earnings_html = '<div class="scroll-container">'
+with st.spinner("Szukam okazji..."):
+    for t in tickers[:8]:
+        e = get_earnings_data_v9(t)
+        if e:
+            earnings_html += f"""<div class="webull-card"><div class="card-header"><a href="{e['link']}" target="_blank">{e['ticker'].replace('.WA','')} 🔗</a></div><table class="webull-table"><thead><tr><th>Wskaźnik</th><th>Prognoza</th><th>Wynik</th><th>Beat/Miss</th></tr></thead><tbody><tr><td>EPS ($)</td><td>{e['eps_est']}</td><td>{e['eps_act']}</td><td class="{e['eps_class']}">{e['eps_txt']}</td></tr><tr class="row-alt"><td>Przychód</td><td>{e['rev_est']}</td><td>{e['rev_act']}</td><td class="{e['rev_class']}">{e['rev_txt']}</td></tr></tbody></table>{'<div class="logo-container"><img src="'+e['logo']+'" class="big-logo"></div>' if e['logo'] else '<div class="logo-container" style="height:60px;"></div>'}<div class="bottom-stats"><div class="stat-row"><span>Przychody r/r:</span><span class="{e['growth_rev_class']}">{e['rev_growth']}%</span></div><div class="stat-row"><span>Zysk (EPS) r/r:</span><span class="{e['growth_eps_class']}">{e['earn_growth']}%</span></div></div></div>"""
+earnings_html += "</div>"
+st.markdown(earnings_html, unsafe_allow_html=True)
+
+st.write("---")
+st.subheader(f"📡 Skaner ({strat.split()[0]}) - Pełny Rynek")
+if st.button(f"🔍 SKANUJ {len(tickers)} SPÓŁEK", type="primary", use_container_width=True):
+    prog = st.progress(0); stat = st.empty(); found = []
+    scan_limit = 100
+    st.info(f"Skanuję {scan_limit} spółek...")
+    for i, t in enumerate(tickers[:scan_limit]):
+        if i%5==0: prog.progress((i+1)/scan_limit); stat.text(f"Analiza {i+1}/{scan_limit}: {t}")
+        res = analyze_stock(t, strat.split()[0], params)
+        if res: found.append(res)
+    prog.empty(); stat.empty()
+    if found:
+        st.success(f"Znaleziono: {len(found)}")
+        for item in found:
+            with st.expander(f"{item['ticker']} ({item['change']}%) - {item['price']}", expanded=True):
+                c1, c2 = st.columns([1,2])
+                with c1:
+                    st.write(f"**Sygnał:** {item['details']['info']}")
+                    st.metric(item['details']['name'], item['details']['val'])
+                    l = f"https://finance.yahoo.com/quote/{item['ticker']}"
+                    st.link_button("👉 Yahoo Finance", l)
+                with c2: st.line_chart(item['chart_data'].tail(60))
+    else: st.warning("Brak wyników.")
