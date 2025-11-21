@@ -1,17 +1,17 @@
 import streamlit as st
 import yfinance as yf
 import pandas as pd
-import requests
-from io import StringIO
 import warnings
+from datetime import datetime
 
 # --- KONFIGURACJA ---
 st.set_page_config(page_title="KOLgejt", page_icon="📈", layout="wide")
 warnings.simplefilter(action='ignore', category=FutureWarning)
 
-# --- LISTY ZAPASOWE (TOP 50) ---
-# Używane do Podglądu Live oraz jako Koło Ratunkowe, gdyby pełne skanowanie padło.
-SP500_TOP50 = [
+# --- LISTY SPÓŁEK (STABILNE) ---
+
+# USA - S&P 500 (Top 50)
+SP500_TOP = [
     "AAPL", "MSFT", "NVDA", "GOOGL", "AMZN", "META", "TSLA", "BRK-B", "LLY", "AVGO",
     "JPM", "V", "XOM", "UNH", "MA", "PG", "JNJ", "HD", "MRK", "COST",
     "ABBV", "CVX", "CRM", "BAC", "WMT", "AMD", "ACN", "PEP", "KO", "LIN",
@@ -19,7 +19,8 @@ SP500_TOP50 = [
     "INTU", "NKE", "IBM", "PM", "GE", "AMAT", "TXN", "NOW", "SPGI", "CAT"
 ]
 
-NASDAQ_TOP50 = [
+# USA - Nasdaq 100 (Top 50)
+NASDAQ_TOP = [
     "AAPL", "MSFT", "NVDA", "AMZN", "GOOGL", "META", "TSLA", "AVGO", "COST", "PEP",
     "AMD", "NFLX", "CSCO", "INTC", "TMUS", "CMCSA", "TXN", "AMAT", "QCOM", "HON",
     "INTU", "AMGN", "BKNG", "ISRG", "SBUX", "MDLZ", "GILD", "ADP", "LRCX", "ADI",
@@ -27,7 +28,14 @@ NASDAQ_TOP50 = [
     "CSX", "PYPL", "MNST", "ORLY", "ASML", "NXPI", "CTAS", "WDAY", "FTNT", "KDP"
 ]
 
-# --- FUNKCJE MATEMATYCZNE ---
+# POLSKA - WIG20 (Pełna lista)
+WIG20_FULL = [
+    "PKN.WA", "PKO.WA", "PZU.WA", "PEO.WA", "DNP.WA", "KGH.WA", "LPP.WA", "ALE.WA",
+    "CDR.WA", "SPL.WA", "CPS.WA", "PGE.WA", "KRU.WA", "KTY.WA", "ACP.WA", "MBK.WA",
+    "JSW.WA", "ALR.WA", "TPE.WA", "PCO.WA"
+]
+
+# --- FUNKCJE POMOCNICZE ---
 
 def calc_rsi(series, period=14):
     delta = series.diff()
@@ -46,49 +54,52 @@ def calc_bollinger(series, period=20, std_dev=2):
     low = sma - (std * std_dev)
     return up, low
 
-# --- INTELIGENTNE POBIERANIE LISTY (FULL SCAN) ---
+# --- ANALIZA RYNKU (TOP 5 & SPADKI) ---
 
-@st.cache_data(ttl=3600) # Cache na 1h
-def get_tickers_full(market_type):
-    headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36"}
-    
-    # 1. NASDAQ (Pełna lista)
-    if market_type == "Nasdaq":
-        try:
-            # Próba 1: Wikipedia
-            url = 'https://en.wikipedia.org/wiki/Nasdaq-100'
-            response = requests.get(url, headers=headers)
-            tables = pd.read_html(StringIO(response.text))
-            for t in tables:
-                if 'Ticker' in t.columns:
-                    return [str(x).replace('.', '-') for x in t['Ticker'].tolist()]
-            return [str(x).replace('.', '-') for x in tables[4]['Ticker'].tolist()]
-        except:
-            # Backup: Zwracamy Top 50 (żeby skaner działał mimo błędu sieci)
-            return NASDAQ_TOP50
-
-    # 2. S&P 500 (Pełna lista)
-    else:
-        try:
-            # Próba 1: Wikipedia
-            url = 'https://en.wikipedia.org/wiki/List_of_S%26P_500_companies'
-            response = requests.get(url, headers=headers)
-            tables = pd.read_html(StringIO(response.text))
-            return [str(t).replace('.', '-') for t in tables[0]['Symbol'].tolist()]
-        except:
+def get_market_overview(tickers):
+    """Pobiera dane dla Top 5 i oblicza spadki miesięczne dla całej listy."""
+    try:
+        # Pobieramy dane z ostatniego miesiąca dla CAŁEJ listy (dla efektywności)
+        # group_by='ticker' pozwala łatwiej operować na kolumnach
+        data = yf.download(tickers, period="1mo", progress=False, timeout=5, group_by='ticker', auto_adjust=False)
+        
+        # 1. Top 5 (Ceny bieżące)
+        top5_data = []
+        # Bierzemy po prostu 5 pierwszych z listy (które są zazwyczaj największe)
+        for t in tickers[:5]:
             try:
-                # Próba 2: GitHub CSV
-                url_csv = "https://raw.githubusercontent.com/datasets/s-and-p-500-companies/master/data/constituents.csv"
-                return [str(t).replace('.', '-') for t in pd.read_csv(url_csv)['Symbol'].tolist()]
-            except:
-                # Backup: Top 50
-                return SP500_TOP50
+                if len(data[t]) > 0:
+                    curr = data[t]['Close'].iloc[-1]
+                    prev = data[t]['Close'].iloc[-2]
+                    chg = ((curr - prev) / prev) * 100
+                    top5_data.append({"ticker": t, "price": curr, "change": chg})
+            except: pass
 
-# --- ANALIZA ---
+        # 2. Największe spadki (30 dni)
+        losers = []
+        for t in tickers:
+            try:
+                # Obliczamy zmianę od początku miesiąca do teraz
+                if len(data[t]) > 10: # Musi być trochę danych
+                    start_price = data[t]['Close'].iloc[0]
+                    end_price = data[t]['Close'].iloc[-1]
+                    month_chg = ((end_price - start_price) / start_price) * 100
+                    
+                    if month_chg < 0: # Tylko spadkowe
+                        losers.append({"ticker": t, "month_change": month_chg, "price": end_price})
+            except: pass
+        
+        # Sortujemy spadki (od największego minusa)
+        losers.sort(key=lambda x: x['month_change'])
+        
+        return top5_data, losers[:5] # Zwracamy Top 5 i 5 największych spadkowiczów
+    except Exception as e:
+        return [], []
+
+# --- ANALIZA TECHNICZNA (SKANER) ---
 
 def analyze_stock(ticker, strategy, params):
     try:
-        # Timeout 2s dla szybkości przy pełnym skanowaniu
         data = yf.download(ticker, period="1y", progress=False, timeout=2, auto_adjust=False)
         if len(data) < 50: return None
 
@@ -96,48 +107,33 @@ def analyze_stock(ticker, strategy, params):
         result = None
         chart_lines = {}
 
-        # STRATEGIA 1: RSI
+        # RSI
         if strategy == "RSI":
             rsi = calc_rsi(close, 14)
             thresh = params['rsi_threshold']
-            curr_rsi = rsi.iloc[-1]
-            
-            if curr_rsi <= thresh:
-                result = {
-                    "info": f"RSI: {round(curr_rsi, 1)}",
-                    "val": round(curr_rsi, 1),
-                    "name": "RSI"
-                }
+            curr = rsi.iloc[-1]
+            if curr <= thresh:
+                result = {"info": f"RSI: {round(curr, 1)}", "val": round(curr, 1), "name": "RSI"}
                 chart_lines = {'RSI': rsi}
 
-        # STRATEGIA 2: SMA
+        # SMA
         elif strategy == "SMA":
             per = params['sma_period']
             sma = calc_sma(close, per)
-            curr_price = close.iloc[-1]
+            curr = close.iloc[-1]
             curr_sma = sma.iloc[-1]
-            
-            if curr_price > curr_sma:
-                diff = (curr_price - curr_sma) / curr_sma * 100
-                result = {
-                    "info": f"+{round(diff, 1)}% nad SMA",
-                    "val": round(curr_sma, 2),
-                    "name": f"SMA {per}"
-                }
+            if curr > curr_sma:
+                diff = (curr - curr_sma) / curr_sma * 100
+                result = {"info": f"+{round(diff, 1)}% nad SMA", "val": round(curr_sma, 2), "name": f"SMA {per}"}
                 chart_lines = {f'SMA_{per}': sma}
 
-        # STRATEGIA 3: BOLLINGER
+        # BOLLINGER
         elif strategy == "Bollinger":
             up, low = calc_bollinger(close, 20, 2)
-            curr_price = close.iloc[-1]
+            curr = close.iloc[-1]
             curr_low = low.iloc[-1]
-            
-            if curr_price <= low.iloc[-1] * 1.05:
-                result = {
-                    "info": "Przy dolnej wstędze",
-                    "val": round(low.iloc[-1], 2),
-                    "name": "Dolna Band"
-                }
+            if curr <= curr_low * 1.05:
+                result = {"info": "Przy dolnej wstędze", "val": round(curr_low, 2), "name": "Dolna Band"}
                 chart_lines = {'Low': low, 'Up': up}
 
         if result:
@@ -153,88 +149,98 @@ def analyze_stock(ticker, strategy, params):
         return None
     return None
 
-# --- INTERFEJS ---
+# --- INTERFEJS APLIKACJI ---
 
-st.title("📈 KOLgejt")
-
-# PANEL BOCZNY (USTAWIENIA)
+# Pasek boczny
 with st.sidebar:
-    st.header("⚙️ Konfiguracja")
+    st.header("KOLgejt 5.0")
     
-    st.subheader("1. Rynek")
-    market = st.radio("Indeks:", ["🇺🇸 S&P 500", "💻 Nasdaq 100"])
+    st.subheader("1. Wybór Rynku")
+    market_choice = st.radio("Giełda:", ["🇺🇸 S&P 500", "💻 Nasdaq 100", "🇵🇱 WIG20 (GPW)"])
     
     st.divider()
     
-    st.subheader("2. Kryteria")
-    strat = st.selectbox("Strategia:", ["RSI (Wyprzedanie)", "SMA (Trend)", "Bollinger (Dołki)"])
+    st.subheader("2. Kryteria Skanera")
+    strat = st.selectbox("Wskaźnik:", ["RSI (Wyprzedanie)", "SMA (Trend)", "Bollinger (Dołki)"])
     
     params = {}
     if "RSI" in strat:
-        params['rsi_threshold'] = st.slider("Szukaj RSI poniżej:", 20, 75, 40)
-        st.caption("Im wyżej, tym więcej wyników.")
+        params['rsi_threshold'] = st.slider("RSI poniżej:", 20, 80, 40)
     elif "SMA" in strat:
         params['sma_period'] = st.slider("Długość średniej:", 10, 200, 50)
     elif "Bollinger" in strat:
-        st.info("Szukamy ceny przy dolnej wstędze.")
+        st.info("Cena przy dolnej wstędze.")
+        
+    st.divider()
+    st.caption(f"Data: {datetime.now().strftime('%Y-%m-%d %H:%M')}")
 
-# GŁÓWNY WIDOK
+# GŁÓWNY EKRAN
+c1, c2 = st.columns([3, 1])
+with c1:
+    st.title("📈 KOLgejt")
+with c2:
+    if st.button("🔄 Odśwież dane"):
+        st.rerun()
 
-# Ustalenie listy preview (zawsze top 8)
-if "Nasdaq" in market:
-    preview_tickers = NASDAQ_TOP50[:8]
-    market_name = "Nasdaq 100"
+# Dobór listy spółek
+if "WIG20" in market_choice:
+    tickers = WIG20_FULL
+    curr_market = "WIG20"
+elif "Nasdaq" in market_choice:
+    tickers = NASDAQ_TOP50
+    curr_market = "Nasdaq 100"
 else:
-    preview_tickers = SP500_TOP50[:8]
-    market_name = "S&P 500"
+    tickers = SP500_TOP
+    curr_market = "S&P 500"
 
-# --- SEKCJA PODGLĄDU (LIVE) ---
-st.subheader(f"🔥 Podgląd rynku: {market_name}")
-try:
-    cols = st.columns(4)
-    data_top = yf.download(preview_tickers, period="2d", progress=False, timeout=2, auto_adjust=False)['Close']
-    
-    for i, t in enumerate(preview_tickers):
-        if t in data_top.columns:
-            curr = data_top[t].iloc[-1]
-            prev = data_top[t].iloc[-2]
-            chg = ((curr - prev) / prev) * 100
-            
-            color = "normal"
-            if chg > 0: color = "off" # Streamlit metric sam koloruje na zielono/czerwono
-            
-            with cols[i % 4]:
-                st.metric(t, f"{curr:.2f}$", f"{chg:.2f}%")
-except:
-    st.caption("Ładowanie podglądu...")
+# --- SEKCJA 1: PULPIT (Top 5 + Spadki) ---
+
+st.subheader(f"🔥 Pulpit Rynku: {curr_market}")
+
+# Pobieramy dane do pulpitu (Top 5 i Losers)
+with st.spinner("Pobieram dane rynkowe..."):
+    top5, month_losers = get_market_overview(tickers)
+
+# Wyświetlenie TOP 5
+cols = st.columns(5)
+for i, item in enumerate(top5):
+    with cols[i]:
+        color = "normal"
+        if item['change'] > 0: color = "off" # Streamlit auto-colors positive green
+        st.metric(item['ticker'].replace('.WA', ''), f"{item['price']:.2f}", f"{item['change']:.2f}%")
+
+st.write("")
+
+# Wyświetlenie SPADKOWICZÓW (Miesiąc)
+with st.expander("🔻 Największe spadki (Ostatnie 30 dni) - Zobacz listę", expanded=True):
+    if month_losers:
+        l_cols = st.columns(5)
+        for i, loser in enumerate(month_losers):
+            with l_cols[i]:
+                st.metric(
+                    loser['ticker'].replace('.WA', ''), 
+                    f"{loser['price']:.2f}", 
+                    f"{loser['month_change']:.2f}%",
+                    delta_color="inverse" # Czerwony kolor dla minusa
+                )
+    else:
+        st.write("Brak danych lub wszystkie spółki rosną.")
 
 st.divider()
 
-# --- SEKCJA SKANERA ---
-st.subheader("📡 Pełny Skaner")
+# --- SEKCJA 2: SKANER ---
+st.subheader(f"📡 Skaner Techniczny ({strat.split()[0]})")
 
-if st.button(f"🔍 SKANUJ CAŁY {market_name.upper()}", type="primary", use_container_width=True):
+if st.button(f"🔍 SKANUJ {curr_market}", type="primary", use_container_width=True):
     
-    # 1. Pobieranie pełnej listy
-    with st.spinner(f"Pobieram pełną listę spółek dla {market_name}..."):
-        tickers = get_tickers_full("Nasdaq" if "Nasdaq" in market else "SP500")
-    
-    # Sprawdzenie czy pobrało full czy backup
-    if len(tickers) > 60:
-        st.toast(f"Pełny skan: {len(tickers)} spółek.")
-    else:
-        st.warning(f"⚠️ Tryb awaryjny: Skanuję Top {len(tickers)} (Wikipedia zablokowana).")
-
     progress = st.progress(0)
     status = st.empty()
     found = []
     
-    # Pętla skanowania
     for i, t in enumerate(tickers):
-        # Aktualizacja UI co 3% postępu (żeby nie zamulać przeglądarki przy 500 elementach)
-        if i % 15 == 0 or i == len(tickers)-1:
+        if i % 5 == 0: 
             progress.progress((i+1)/len(tickers))
-            status.text(f"Analizuję {i+1}/{len(tickers)}: {t}")
+            status.text(f"Analiza: {t}")
         
         res = analyze_stock(t, strat.split()[0], params)
         if res: found.append(res)
@@ -242,21 +248,27 @@ if st.button(f"🔍 SKANUJ CAŁY {market_name.upper()}", type="primary", use_con
     progress.empty()
     status.empty()
     
-    # WYNIKI
     if found:
-        st.success(f"Znaleziono {len(found)} spółek spełniających kryteria!")
+        st.success(f"Znaleziono {len(found)} sygnałów!")
         for item in found:
-            with st.expander(f"{item['ticker']} ({item['change']}%) - {item['price']}$", expanded=True):
+            with st.expander(f"{item['ticker']} ({item['change']}%) - {item['price']}", expanded=True):
                 c1, c2 = st.columns([1, 2])
                 with c1:
                     st.write(f"**Sygnał:** {item['details']['info']}")
                     st.metric(item['details']['name'], item['details']['val'])
-                    st.link_button("Yahoo Finance", f"https://finance.yahoo.com/quote/{item['ticker']}")
+                    
+                    # Linkowanie: Yahoo dla USA, Bankier/BiznesRadar dla PL (opcjonalnie)
+                    if ".WA" in item['ticker']:
+                        link = f"https://www.biznesradar.pl/notowania/{item['ticker'].replace('.WA', '')}"
+                        st.link_button("👉 BiznesRadar (PL)", link)
+                    else:
+                        link = f"https://finance.yahoo.com/quote/{item['ticker']}"
+                        st.link_button("👉 Yahoo Finance", link)
+
                 with c2:
                     chart = item['chart_data'].tail(60)
                     for k, v in item['extra_lines'].items():
                         chart[k] = v
                     st.line_chart(chart)
     else:
-        st.warning("Brak wyników.")
-        st.info("Rynek nie daje okazji przy tych ustawieniach. Spróbuj poluzować kryteria w panelu bocznym.")
+        st.warning(f"Brak sygnałów na rynku {curr_market}. Spróbuj zmienić strategię.")
